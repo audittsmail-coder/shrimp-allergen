@@ -10,6 +10,7 @@ import {
   listPondHistory,
   deletePathogenResult,
   clearAllPathogenForPond,
+  clearAllPathogenData,
 } from './firebase.js';
 
 let registeredPondNames = null; // Set of pond `name`s from the `ponds` collection, cached per session
@@ -84,6 +85,37 @@ $('#saveConfigBtn').addEventListener('click', async () => {
   } catch (err) {
     statusEl.textContent = 'เชื่อมต่อไม่สำเร็จ: ' + err.message;
     statusEl.className = 'status-txt err';
+  }
+});
+
+$('#clearAllPathogenBtn').addEventListener('click', async () => {
+  const statusEl = $('#clearAllStatus');
+  if (!isConnected()) {
+    statusEl.textContent = 'กรุณาตั้งค่า Firebase ก่อน';
+    statusEl.className = 'status-txt err';
+    return;
+  }
+  const typed = prompt('การกระทำนี้จะลบผลเชื้อของ "ทุกบ่อทุกฟาร์ม" และประวัติการนำเข้ารายงานทั้งหมด ย้อนกลับไม่ได้\n\nพิมพ์คำว่า ล้างข้อมูล เพื่อยืนยัน:');
+  if (typed !== 'ล้างข้อมูล') {
+    if (typed !== null) {
+      statusEl.textContent = 'ยกเลิก — พิมพ์ไม่ตรง';
+      statusEl.className = 'status-txt err';
+    }
+    return;
+  }
+  statusEl.textContent = 'กำลังล้างข้อมูล...';
+  statusEl.className = 'status-txt';
+  $('#clearAllPathogenBtn').disabled = true;
+  try {
+    const { recordsCleared, reportsDeleted } = await clearAllPathogenData();
+    statusEl.textContent = `ล้างข้อมูลสำเร็จ ✅ — ลบผลเชื้อ ${recordsCleared} รายการ, ลบประวัติรายงาน ${reportsDeleted} รายการ`;
+    statusEl.className = 'status-txt ok';
+    registeredPondNames = null; // stale cache after a full data reset
+  } catch (err) {
+    statusEl.textContent = 'ล้างข้อมูลไม่สำเร็จ: ' + err.message;
+    statusEl.className = 'status-txt err';
+  } finally {
+    $('#clearAllPathogenBtn').disabled = false;
   }
 });
 

@@ -196,3 +196,26 @@ export async function clearAllPathogenForPond(pondId) {
   }
   return withPathogen.length;
 }
+
+// Full reset: strips pathogen fields from every pond's `records` (across all farms) and
+// deletes this app's own `reports` import log. Leaves growth/feed data untouched — same
+// per-record rule as deletePathogenResult (drop the whole doc only if it holds nothing else).
+export async function clearAllPathogenData() {
+  const s = await loadSdk();
+  if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
+
+  const recordsSnap = await s.getDocs(s.collection(dbInstance, 'records'));
+  const pathogenEntries = recordsSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((r) => r.pathogenSeverity || r.pathogenStatus);
+  for (const entry of pathogenEntries) {
+    await deletePathogenResult(entry);
+  }
+
+  const reportsSnap = await s.getDocs(s.collection(dbInstance, 'reports'));
+  for (const d of reportsSnap.docs) {
+    await s.deleteDoc(d.ref);
+  }
+
+  return { recordsCleared: pathogenEntries.length, reportsDeleted: reportsSnap.size };
+}
