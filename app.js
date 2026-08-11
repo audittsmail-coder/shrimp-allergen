@@ -10,6 +10,15 @@ import {
   listPondHistory,
 } from './firebase.js';
 
+let registeredPondNames = null; // Set of pond `name`s from the `ponds` collection, cached per session
+
+async function getRegisteredPondNames() {
+  if (registeredPondNames) return registeredPondNames;
+  const ponds = await listPonds();
+  registeredPondNames = new Set(ponds.map((p) => String(p.name)));
+  return registeredPondNames;
+}
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -108,7 +117,7 @@ $('#fileInput').addEventListener('change', async (e) => {
   $('#parseStatus').className = 'status-txt';
 });
 
-$('#parseBtn').addEventListener('click', () => {
+$('#parseBtn').addEventListener('click', async () => {
   const html = $('#htmlInput').value.trim();
   const statusEl = $('#parseStatus');
   if (!html) {
@@ -118,11 +127,29 @@ $('#parseBtn').addEventListener('click', () => {
   }
   try {
     parsedData = parseReportHtml(html);
+
+    // Only show ponds that already exist in the `ponds` collection (added via the
+    // farm-management app) — a report row with no matching pond has nowhere to save to.
+    let skippedCount = 0;
+    if (parsedData.ponds.length && isConnected()) {
+      try {
+        const names = await getRegisteredPondNames();
+        const before = parsedData.ponds.length;
+        parsedData.ponds = parsedData.ponds.filter((p) => names.has(String(p.pondNo)));
+        skippedCount = before - parsedData.ponds.length;
+      } catch {
+        // If the lookup fails, fall back to showing everything unfiltered.
+      }
+    }
+
     if (!parsedData.ponds.length) {
-      statusEl.textContent = 'แยกข้อมูลสำเร็จ แต่ไม่พบข้อมูลบ่อ — ตรวจสอบโครงสร้าง HTML หรือเพิ่มแถวเอง';
+      statusEl.textContent = skippedCount
+        ? `แยกข้อมูลสำเร็จ แต่บ่อทั้งหมด ${skippedCount} บ่อยังไม่ได้เพิ่มในแอปจัดการบ่อ จึงไม่มีรายการให้บันทึก`
+        : 'แยกข้อมูลสำเร็จ แต่ไม่พบข้อมูลบ่อ — ตรวจสอบโครงสร้าง HTML หรือเพิ่มแถวเอง';
       statusEl.className = 'status-txt err';
     } else {
-      statusEl.textContent = `แยกข้อมูลสำเร็จ พบ ${parsedData.ponds.length} รายการบ่อ`;
+      statusEl.textContent = `แยกข้อมูลสำเร็จ พบ ${parsedData.ponds.length} รายการบ่อ` +
+        (skippedCount ? ` (ข้าม ${skippedCount} บ่อที่ยังไม่ได้เพิ่มในแอปจัดการบ่อ)` : '');
       statusEl.className = 'status-txt ok';
     }
     renderPreview(parsedData);
