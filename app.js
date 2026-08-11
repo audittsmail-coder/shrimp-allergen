@@ -8,7 +8,7 @@ import {
   listReports,
   listPonds,
   listPondHistory,
-  deletePathogenResult,
+  deletePondPathogenEntry,
   clearAllPathogenForPond,
   clearAllPathogenData,
 } from './firebase.js';
@@ -420,27 +420,24 @@ async function loadTrend(pondId) {
   statusEl.textContent = 'กำลังโหลดเทรนด์...';
   try {
     const entries = await listPondHistory(pondId);
-    statusEl.textContent = `พบ ${entries.length} รายการ (จาก records)`;
+    statusEl.textContent = `พบ ${entries.length} รายการ`;
     statusEl.className = 'status-txt ok';
-    clearBtn.style.display = entries.some((e) => e.pathogenSeverity || e.pathogenStatus) ? 'inline-block' : 'none';
+    clearBtn.style.display = entries.length ? 'inline-block' : 'none';
 
     const table = document.createElement('table');
     table.className = 'edit-table';
     table.innerHTML = `
-      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>ไซส์</th><th>อาหาร/วัน</th><th>อัตรารอด</th><th>โน้ต</th><th></th></tr></thead>
+      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>แย่ลง?</th><th></th></tr></thead>
       <tbody>
         ${entries
           .map(
-            (e) => `
-          <tr class="${{ critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[e.pathogenSeverity] || ''}" data-record-id="${escapeAttr(e.id)}">
+            (e, i) => `
+          <tr class="${{ critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[e.severity] || ''}" data-index="${i}">
             <td>${escapeAttr(e.weekDate || '-')}</td>
-            <td>${escapeAttr(e.pathogenStatus || '-')}</td>
-            <td>${escapeAttr(e.pathogenSeverity || '-')}</td>
-            <td>${escapeAttr(e.sizeCount ?? '-')}</td>
-            <td>${escapeAttr(e.feedPerDay ?? '-')}</td>
-            <td>${escapeAttr(e.survivalRate ?? '-')}</td>
-            <td>${escapeAttr(e.note || '-')}</td>
-            <td>${e.pathogenSeverity || e.pathogenStatus ? '<button type="button" class="row-del trend-del-btn">ลบผลเชื้อ</button>' : ''}</td>
+            <td>${escapeAttr(e.status || '-')}</td>
+            <td>${escapeAttr(e.severity || '-')}</td>
+            <td style="text-align:center;">${e.worsened ? '▲' : ''}</td>
+            <td><button type="button" class="row-del trend-del-btn">ลบ</button></td>
           </tr>`
           )
           .join('')}
@@ -451,11 +448,12 @@ async function loadTrend(pondId) {
     table.querySelectorAll('.trend-del-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const tr = btn.closest('tr');
-        const entry = entries.find((e) => e.id === tr.dataset.recordId);
+        const index = parseInt(tr.dataset.index, 10);
+        const entry = entries[index];
         if (!entry) return;
         if (!confirm(`ลบผลเชื้อของสัปดาห์ ${entry.weekDate} ออก?`)) return;
         try {
-          await deletePathogenResult(entry);
+          await deletePondPathogenEntry(pondId, index);
           await loadTrend(pondId);
         } catch (err) {
           statusEl.textContent = 'ลบไม่สำเร็จ: ' + err.message;

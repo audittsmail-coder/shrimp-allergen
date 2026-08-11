@@ -43,9 +43,6 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
     match /ponds/{pondId} {
-      allow read: if request.auth != null;
-    }
-    match /records/{recordId} {
       allow read, write: if request.auth != null;
     }
   }
@@ -55,18 +52,17 @@ service cloud.firestore {
 ## โครงสร้างข้อมูลใน Firestore
 
 แอปนี้เชื่อมกับ Firestore ของ**อีกแอปที่มีอยู่แล้ว** (แอปจัดการบ่อ/บันทึกการเจริญเติบโตรายสัปดาห์)
-โดยใช้คอลเลกชันร่วมกัน 2 ตัว แทนที่จะสร้างชุดข้อมูลแยกของตัวเอง:
+โดยผูกผลเชื้อเข้ากับ**เอกสารบ่อโดยตรง** แทนที่จะไปสร้าง/แก้ไขเอกสารในคอลเลกชัน `records`
+(ซึ่งเป็นบันทึกการเจริญเติบโต/ให้อาหารรายสัปดาห์ของอีกแอป คนละเรื่องกับผลเชื้อ) — เพื่อไม่ให้เกิด
+แถววันที่ปลอมๆ ที่ไม่มีข้อมูลไซส์/อาหารโผล่ในตารางประวัติของอีกแอป
 
-- **`ponds/{pondId}`** (มีอยู่แล้ว, อ่านอย่างเดียว) — เอกสาร 1 อันต่อ 1 บ่อ มีฟิลด์ `name`
-  (เลขบ่อ 3 หลัก เช่น `"303"` = ฟาร์ม 3 บ่อ 03), `farmId`, `species`, `brand`, `releaseDate`,
-  `releaseCount` แอปนี้ค้นหา `pondId` จากเลขบ่อที่ parse ได้ โดยเทียบกับฟิลด์ `name`
-- **`records/{recordId}`** (มีอยู่แล้ว ใช้ร่วมกับแอปเดิม) — เอกสาร 1 อันต่อ 1 บ่อต่อ 1 สัปดาห์
-  (`pondId` + `weekDate`) เดิมเก็บข้อมูลการเจริญเติบโต/ให้อาหาร (`sizeCount`, `feedPerDay`,
-  `survivalRate`, `note`) แอปนี้จะ **ค้นหาเอกสารที่ `pondId`+`weekDate` ตรงกันก่อน** ถ้าเจอจะ
-  merge ฟิลด์ผลเชื้อเข้าไปในเอกสารเดิม ถ้ายังไม่เจอจะสร้างเอกสารใหม่ (มีแค่ฟิลด์ผลเชื้อ)
-  ฟิลด์ที่เพิ่มเข้าไป: `pathogenStatus` (ข้อความสถานะ), `pathogenSeverity`
-  (`normal`/`watch`/`critical`), `pathogenWorsened` (bool), `pathogenReportId`
-  (อ้างอิงกลับไปที่เอกสารใน `reports`)
+- **`ponds/{pondId}`** (มีอยู่แล้ว) — เอกสาร 1 อันต่อ 1 บ่อ มีฟิลด์เดิม `name` (เลขบ่อ 3 หลัก
+  เช่น `"303"` = ฟาร์ม 3 บ่อ 03), `farmId`, `species`, `brand`, `releaseDate`, `releaseCount`
+  แอปนี้ค้นหา `pondId` จากเลขบ่อที่ parse ได้ โดยเทียบกับฟิลด์ `name` แล้วเพิ่มฟิลด์ผลเชื้อเข้าไป:
+  - `pathogenStatus`, `pathogenSeverity` (`normal`/`watch`/`critical`), `pathogenWorsened`,
+    `pathogenDate`, `pathogenReportId` — ผลล่าสุดเท่านั้น ใช้แสดง badge/สรุปด่วน
+  - `pathogenHistory[]` — array เก็บผลทุกสัปดาห์ที่เคยนำเข้า แต่ละรายการมี
+    `{ weekDate, status, severity, worsened, reportId }` ใช้แสดงเทรนด์/ประวัติแบบเต็ม
 - **`reports/{autoId}`** (คอลเลกชันใหม่ เฉพาะแอปนี้) — เก็บ log การนำเข้าแต่ละครั้งแบบเต็ม
   (title/เขต/รอบ, รายการบ่อทั้งหมด, การแจ้งเตือน `alerts[]`, ข่าวดี `goodNews[]`, คำแนะนำ
   `recommendations[]`, ตารางเทียบผลดิบ `compareTables[]`) ใช้แสดงในแท็บ "ประวัติรายสัปดาห์"

@@ -75,20 +75,32 @@ async function findPondIdByName(pondNo) {
   return snap.empty ? null : snap.docs[0].id;
 }
 
-// Weekly records already exist per pond+week (growth/feed data) in `records`. Pathogen
-// results are merged into that same weekly doc when one exists for the pond+date, or
-// create a new one otherwise — so the existing app's per-pond/week list picks it up
-// without needing a separate query.
-async function upsertPathogenFields(pondId, weekDate, fields) {
+// Pathogen results live directly on the pond document — NOT in `records` (which is the
+// other app's weekly growth/feed log, keyed by pondId+weekDate). Merging into `records`
+// used to fabricate a growth-record row for the pathogen's date even when no growth data
+// existed for that week, which showed up as a confusing all-dashes row in that app's
+// history table. Attaching to the pond instead avoids touching that table at all:
+//   ponds/{pondId}.pathogenStatus / .pathogenSeverity / .pathogenWorsened / .pathogenDate
+//     — latest result, for quick badges/overview rows
+//   ponds/{pondId}.pathogenHistory[]  — full log of every week's result, for trend views
+async function attachPathogenToPond(pondId, p, reportId) {
   const s = await loadSdk();
-  const recordsCol = s.collection(dbInstance, 'records');
-  const q = s.query(recordsCol, s.where('pondId', '==', pondId), s.where('weekDate', '==', weekDate), s.limit(1));
-  const snap = await s.getDocs(q);
-  if (!snap.empty) {
-    await s.updateDoc(snap.docs[0].ref, { ...fields, updatedAt: Date.now() });
-  } else {
-    await s.addDoc(recordsCol, { pondId, weekDate, ...fields, createdAt: s.serverTimestamp(), updatedAt: Date.now() });
-  }
+  const ref = s.doc(dbInstance, 'ponds', pondId);
+  const entry = {
+    weekDate: p.dateISO || p.dateRaw || '',
+    status: p.status,
+    severity: p.severity,
+    worsened: !!p.worsened,
+    reportId: reportId || null,
+  };
+  await s.updateDoc(ref, {
+    pathogenStatus: entry.status,
+    pathogenSeverity: entry.severity,
+    pathogenWorsened: entry.worsened,
+    pathogenDate: entry.weekDate,
+    pathogenReportId: entry.reportId,
+    pathogenHistory: s.arrayUnion(entry),
+  });
 }
 
 export async function saveReport(parsed) {
@@ -109,8 +121,6 @@ export async function saveReport(parsed) {
     compareTables: parsed.compareTables,
   });
 
-  // Merge each pond's pathogen status into the matching `records` doc (by pondId + weekDate)
-  // so the existing farm app's weekly-record view shows it alongside growth/feed data.
   const unmatchedPonds = [];
   for (const p of parsed.ponds) {
     if (!p.dateISO) {
@@ -122,12 +132,7 @@ export async function saveReport(parsed) {
       unmatchedPonds.push(p.pondNo);
       continue;
     }
-    await upsertPathogenFields(pondId, p.dateISO, {
-      pathogenStatus: p.status,
-      pathogenSeverity: p.severity,
-      pathogenWorsened: p.worsened,
-      pathogenReportId: reportDoc.id,
-    });
+    await attachPathogenToPond(pondId, p, reportDoc.id);
   }
 
   return { reportId: reportDoc.id, unmatchedPonds };
@@ -150,66 +155,84 @@ export async function listPonds() {
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
+// Returns the pond's pathogenHistory array (oldest first), read straight off the pond doc.
 export async function listPondHistory(pondId) {
   const s = await loadSdk();
   if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
-  // Sorted client-side (rather than orderBy in the query) so this doesn't need a
-  // composite Firestore index — an equality filter + orderBy on a different field
-  // would otherwise require one to be created manually in the console.
-  const q = s.query(s.collection(dbInstance, 'records'), s.where('pondId', '==', pondId));
-  const snap = await s.getDocs(q);
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => String(a.weekDate || '').localeCompare(String(b.weekDate || '')));
+  const snap = await s.getDoc(s.doc(dbInstance, 'ponds', pondId));
+  if (!snap.exists()) return [];
+  const history = (snap.data().pathogenHistory || []).slice();
+  return history.sort((a, b) => String(a.weekDate || '').localeCompare(String(b.weekDate || '')));
 }
 
-function hasGrowthData(entry) {
-  return entry.sizeCount != null || entry.feedPerDay != null || entry.survivalRate != null || !!(entry.note && entry.note.trim());
+function recomputeLatestFields(history) {
+  const sorted = history.slice().sort((a, b) => String(a.weekDate || '').localeCompare(String(b.weekDate || '')));
+  const latest = sorted[sorted.length - 1];
+  if (!latest) return null;
+  return {
+    pathogenStatus: latest.status,
+    pathogenSeverity: latest.severity,
+    pathogenWorsened: !!latest.worsened,
+    pathogenDate: latest.weekDate,
+    pathogenReportId: latest.reportId || null,
+  };
 }
 
-// Removes just the pathogen fields from a weekly `records` doc, leaving any growth/feed
-// data (sizeCount/feedPerDay/...) the other app wrote untouched. If the doc has no growth
-// data either, it was created purely to hold this pathogen result, so the whole doc is
-// deleted instead of leaving an empty leftover record behind.
-export async function deletePathogenResult(entry) {
+function clearLatestFieldsUpdate(s) {
+  return {
+    pathogenStatus: s.deleteField(),
+    pathogenSeverity: s.deleteField(),
+    pathogenWorsened: s.deleteField(),
+    pathogenDate: s.deleteField(),
+    pathogenReportId: s.deleteField(),
+  };
+}
+
+// Removes one entry (by its position in the array as currently displayed) from a pond's
+// pathogen history, then recomputes the pond's "latest result" fields from what remains.
+export async function deletePondPathogenEntry(pondId, index) {
   const s = await loadSdk();
   if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
-  const ref = s.doc(dbInstance, 'records', entry.id);
-  if (hasGrowthData(entry)) {
-    await s.updateDoc(ref, {
-      pathogenStatus: s.deleteField(),
-      pathogenSeverity: s.deleteField(),
-      pathogenWorsened: s.deleteField(),
-      pathogenReportId: s.deleteField(),
-      updatedAt: Date.now(),
-    });
-  } else {
-    await s.deleteDoc(ref);
-  }
+  const ref = s.doc(dbInstance, 'ponds', pondId);
+  const snap = await s.getDoc(ref);
+  if (!snap.exists()) return;
+  const history = (snap.data().pathogenHistory || []).slice();
+  const sorted = history.slice().sort((a, b) => String(a.weekDate || '').localeCompare(String(b.weekDate || '')));
+  const target = sorted[index];
+  const remaining = target ? history.filter((h) => h !== target) : history;
+
+  const latestFields = recomputeLatestFields(remaining);
+  await s.updateDoc(ref, {
+    pathogenHistory: remaining,
+    ...(latestFields || clearLatestFieldsUpdate(s)),
+  });
 }
 
 export async function clearAllPathogenForPond(pondId) {
-  const entries = await listPondHistory(pondId);
-  const withPathogen = entries.filter((e) => e.pathogenSeverity || e.pathogenStatus);
-  for (const entry of withPathogen) {
-    await deletePathogenResult(entry);
-  }
-  return withPathogen.length;
+  const s = await loadSdk();
+  if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
+  const ref = s.doc(dbInstance, 'ponds', pondId);
+  const snap = await s.getDoc(ref);
+  if (!snap.exists()) return 0;
+  const count = (snap.data().pathogenHistory || []).length;
+  if (!count) return 0;
+  await s.updateDoc(ref, { pathogenHistory: [], ...clearLatestFieldsUpdate(s) });
+  return count;
 }
 
-// Full reset: strips pathogen fields from every pond's `records` (across all farms) and
-// deletes this app's own `reports` import log. Leaves growth/feed data untouched — same
-// per-record rule as deletePathogenResult (drop the whole doc only if it holds nothing else).
+// Full reset: strips pathogen fields from every pond (across all farms) and deletes this
+// app's own `reports` import log. Never touches growth/feed data in `records`.
 export async function clearAllPathogenData() {
   const s = await loadSdk();
   if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
 
-  const recordsSnap = await s.getDocs(s.collection(dbInstance, 'records'));
-  const pathogenEntries = recordsSnap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((r) => r.pathogenSeverity || r.pathogenStatus);
-  for (const entry of pathogenEntries) {
-    await deletePathogenResult(entry);
+  const pondsSnap = await s.getDocs(s.collection(dbInstance, 'ponds'));
+  let recordsCleared = 0;
+  for (const d of pondsSnap.docs) {
+    const count = (d.data().pathogenHistory || []).length;
+    if (!count) continue;
+    recordsCleared += count;
+    await s.updateDoc(d.ref, { pathogenHistory: [], ...clearLatestFieldsUpdate(s) });
   }
 
   const reportsSnap = await s.getDocs(s.collection(dbInstance, 'reports'));
@@ -217,5 +240,5 @@ export async function clearAllPathogenData() {
     await s.deleteDoc(d.ref);
   }
 
-  return { recordsCleared: pathogenEntries.length, reportsDeleted: reportsSnap.size };
+  return { recordsCleared, reportsDeleted: reportsSnap.size };
 }
