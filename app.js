@@ -95,8 +95,8 @@ $('#clearAllPathogenBtn').addEventListener('click', async () => {
     statusEl.className = 'status-txt err';
     return;
   }
-  const typed = prompt('การกระทำนี้จะลบผลเชื้อของ "ทุกบ่อทุกฟาร์ม" และประวัติการนำเข้ารายงานทั้งหมด ย้อนกลับไม่ได้\n\nพิมพ์คำว่า ล้างข้อมูล เพื่อยืนยัน:');
-  if (typed !== 'ล้างข้อมูล') {
+  const typed = prompt('การกระทำนี้จะลบผลเชื้อของ "ทุกบ่อทุกฟาร์ม" และประวัติการนำเข้ารายงานทั้งหมด ย้อนกลับไม่ได้\n\nพิมพ์คำว่า DELETE เพื่อยืนยัน:');
+  if ((typed || '').trim().toUpperCase() !== 'DELETE') {
     if (typed !== null) {
       statusEl.textContent = 'ยกเลิก — พิมพ์ไม่ตรง';
       statusEl.className = 'status-txt err';
