@@ -8,6 +8,8 @@ import {
   listReports,
   listPonds,
   listPondHistory,
+  deletePathogenResult,
+  clearAllPathogenForPond,
 } from './firebase.js';
 
 let registeredPondNames = null; // Set of pond `name`s from the `ponds` collection, cached per session
@@ -374,26 +376,31 @@ async function populatePondSelect() {
   }
 }
 
-$('#pondSelect').addEventListener('change', async (e) => {
-  const pondId = e.target.value;
+async function loadTrend(pondId) {
   const resultEl = $('#trendResult');
   const statusEl = $('#trendStatus');
+  const clearBtn = $('#clearPondPathogenBtn');
   resultEl.innerHTML = '';
-  if (!pondId) return;
+  if (!pondId) {
+    clearBtn.style.display = 'none';
+    return;
+  }
   statusEl.textContent = 'กำลังโหลดเทรนด์...';
   try {
     const entries = await listPondHistory(pondId);
     statusEl.textContent = `พบ ${entries.length} รายการ (จาก records)`;
     statusEl.className = 'status-txt ok';
+    clearBtn.style.display = entries.some((e) => e.pathogenSeverity || e.pathogenStatus) ? 'inline-block' : 'none';
+
     const table = document.createElement('table');
     table.className = 'edit-table';
     table.innerHTML = `
-      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>ไซส์</th><th>อาหาร/วัน</th><th>อัตรารอด</th><th>โน้ต</th></tr></thead>
+      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>ไซส์</th><th>อาหาร/วัน</th><th>อัตรารอด</th><th>โน้ต</th><th></th></tr></thead>
       <tbody>
         ${entries
           .map(
             (e) => `
-          <tr class="${{ critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[e.pathogenSeverity] || ''}">
+          <tr class="${{ critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[e.pathogenSeverity] || ''}" data-record-id="${escapeAttr(e.id)}">
             <td>${escapeAttr(e.weekDate || '-')}</td>
             <td>${escapeAttr(e.pathogenStatus || '-')}</td>
             <td>${escapeAttr(e.pathogenSeverity || '-')}</td>
@@ -401,14 +408,52 @@ $('#pondSelect').addEventListener('change', async (e) => {
             <td>${escapeAttr(e.feedPerDay ?? '-')}</td>
             <td>${escapeAttr(e.survivalRate ?? '-')}</td>
             <td>${escapeAttr(e.note || '-')}</td>
+            <td>${e.pathogenSeverity || e.pathogenStatus ? '<button type="button" class="row-del trend-del-btn">ลบผลเชื้อ</button>' : ''}</td>
           </tr>`
           )
           .join('')}
       </tbody>
     `;
     resultEl.appendChild(table);
+
+    table.querySelectorAll('.trend-del-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const tr = btn.closest('tr');
+        const entry = entries.find((e) => e.id === tr.dataset.recordId);
+        if (!entry) return;
+        if (!confirm(`ลบผลเชื้อของสัปดาห์ ${entry.weekDate} ออก?`)) return;
+        try {
+          await deletePathogenResult(entry);
+          await loadTrend(pondId);
+        } catch (err) {
+          statusEl.textContent = 'ลบไม่สำเร็จ: ' + err.message;
+          statusEl.className = 'status-txt err';
+        }
+      });
+    });
   } catch (err) {
     statusEl.textContent = 'โหลดไม่สำเร็จ: ' + err.message;
+    statusEl.className = 'status-txt err';
+  }
+}
+
+$('#pondSelect').addEventListener('change', (e) => loadTrend(e.target.value));
+
+$('#clearPondPathogenBtn').addEventListener('click', async () => {
+  const pondId = $('#pondSelect').value;
+  const statusEl = $('#trendStatus');
+  if (!pondId) return;
+  const pondLabel = $('#pondSelect').selectedOptions[0]?.textContent || pondId;
+  if (!confirm(`ลบผลเชื้อทั้งหมดของ${pondLabel} ออกทุกสัปดาห์? การกระทำนี้ย้อนกลับไม่ได้ (ข้อมูลไซส์/อาหาร/อัตรารอดจะไม่ถูกลบ)`)) return;
+  statusEl.textContent = 'กำลังลบ...';
+  statusEl.className = 'status-txt';
+  try {
+    const count = await clearAllPathogenForPond(pondId);
+    statusEl.textContent = `ลบผลเชื้อ ${count} รายการแล้ว ✅`;
+    statusEl.className = 'status-txt ok';
+    await loadTrend(pondId);
+  } catch (err) {
+    statusEl.textContent = 'ลบไม่สำเร็จ: ' + err.message;
     statusEl.className = 'status-txt err';
   }
 });

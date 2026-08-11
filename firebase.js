@@ -162,3 +162,37 @@ export async function listPondHistory(pondId) {
     .map((d) => ({ id: d.id, ...d.data() }))
     .sort((a, b) => String(a.weekDate || '').localeCompare(String(b.weekDate || '')));
 }
+
+function hasGrowthData(entry) {
+  return entry.sizeCount != null || entry.feedPerDay != null || entry.survivalRate != null || !!(entry.note && entry.note.trim());
+}
+
+// Removes just the pathogen fields from a weekly `records` doc, leaving any growth/feed
+// data (sizeCount/feedPerDay/...) the other app wrote untouched. If the doc has no growth
+// data either, it was created purely to hold this pathogen result, so the whole doc is
+// deleted instead of leaving an empty leftover record behind.
+export async function deletePathogenResult(entry) {
+  const s = await loadSdk();
+  if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
+  const ref = s.doc(dbInstance, 'records', entry.id);
+  if (hasGrowthData(entry)) {
+    await s.updateDoc(ref, {
+      pathogenStatus: s.deleteField(),
+      pathogenSeverity: s.deleteField(),
+      pathogenWorsened: s.deleteField(),
+      pathogenReportId: s.deleteField(),
+      updatedAt: Date.now(),
+    });
+  } else {
+    await s.deleteDoc(ref);
+  }
+}
+
+export async function clearAllPathogenForPond(pondId) {
+  const entries = await listPondHistory(pondId);
+  const withPathogen = entries.filter((e) => e.pathogenSeverity || e.pathogenStatus);
+  for (const entry of withPathogen) {
+    await deletePathogenResult(entry);
+  }
+  return withPathogen.length;
+}
