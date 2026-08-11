@@ -139,12 +139,14 @@ export function parseReportHtml(htmlString) {
 
   // Multi-week comparison tables — kept as raw rows/headers rather than
   // semantically parsed, since column meaning (VA/VV/Vp/calcium/...) varies per table.
+  // Each row is wrapped as { cells: [...] } rather than a bare array — Firestore
+  // rejects an array whose direct elements are themselves arrays ("nested arrays").
   const compareTables = [];
   doc.querySelectorAll('.compare-table').forEach((table) => {
     const headers = Array.from(table.querySelectorAll('thead th')).map((th) => th.textContent.trim());
-    const rows = Array.from(table.querySelectorAll('tbody tr')).map((tr) =>
-      Array.from(tr.querySelectorAll('td')).map((td) => td.textContent.trim().replace(/\s+/g, ' '))
-    );
+    const rows = Array.from(table.querySelectorAll('tbody tr')).map((tr) => ({
+      cells: Array.from(tr.querySelectorAll('td')).map((td) => td.textContent.trim().replace(/\s+/g, ' ')),
+    }));
     if (headers.length || rows.length) compareTables.push({ headers, rows });
   });
 
