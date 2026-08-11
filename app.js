@@ -6,6 +6,7 @@ import {
   isConnected,
   saveReport,
   listReports,
+  listPonds,
   listPondHistory,
 } from './firebase.js';
 
@@ -257,9 +258,14 @@ $('#saveBtn').addEventListener('click', async () => {
   statusEl.className = 'status-txt';
   $('#saveBtn').disabled = true;
   try {
-    const id = await saveReport(payload);
-    statusEl.textContent = `บันทึกสำเร็จ ✅ (รหัส ${id})`;
-    statusEl.className = 'status-txt ok';
+    const { reportId, unmatchedPonds } = await saveReport(payload);
+    if (unmatchedPonds.length) {
+      statusEl.textContent = `บันทึกสำเร็จบางส่วน ⚠️ (รหัส ${reportId}) — ไม่พบบ่อนี้ใน ponds จึงยังไม่ได้เชื่อมผลเชื้อ: ${unmatchedPonds.join(', ')} (ต้องเพิ่มบ่อนี้ในแอปจัดการบ่อก่อน แล้วนำเข้ารายงานนี้ซ้ำ)`;
+      statusEl.className = 'status-txt err';
+    } else {
+      statusEl.textContent = `บันทึกสำเร็จ ✅ (รหัส ${reportId}) — เชื่อมผลเชื้อเข้ากับ records ของทุกบ่อแล้ว`;
+      statusEl.className = 'status-txt ok';
+    }
   } catch (err) {
     statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + err.message;
     statusEl.className = 'status-txt err';
@@ -325,19 +331,15 @@ async function populatePondSelect() {
   if (sel.dataset.loaded) return;
   statusEl.textContent = 'กำลังโหลดรายชื่อบ่อ...';
   try {
-    const reports = await listReports();
-    const pondNos = new Set();
-    reports.forEach((r) => (r.ponds || []).forEach((p) => pondNos.add(p.pondNo)));
-    Array.from(pondNos)
-      .sort()
-      .forEach((no) => {
-        const opt = document.createElement('option');
-        opt.value = no;
-        opt.textContent = 'บ่อ ' + no;
-        sel.appendChild(opt);
-      });
+    const ponds = await listPonds();
+    ponds.forEach((p) => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = 'บ่อ ' + (p.name || p.id);
+      sel.appendChild(opt);
+    });
     sel.dataset.loaded = '1';
-    statusEl.textContent = `พบ ${pondNos.size} บ่อ`;
+    statusEl.textContent = `พบ ${ponds.length} บ่อ (จาก ponds)`;
     statusEl.className = 'status-txt ok';
   } catch (err) {
     statusEl.textContent = 'โหลดไม่สำเร็จ: ' + err.message;
@@ -346,29 +348,32 @@ async function populatePondSelect() {
 }
 
 $('#pondSelect').addEventListener('change', async (e) => {
-  const pondNo = e.target.value;
+  const pondId = e.target.value;
   const resultEl = $('#trendResult');
   const statusEl = $('#trendStatus');
   resultEl.innerHTML = '';
-  if (!pondNo) return;
+  if (!pondId) return;
   statusEl.textContent = 'กำลังโหลดเทรนด์...';
   try {
-    const entries = await listPondHistory(pondNo);
-    statusEl.textContent = `พบ ${entries.length} รายการ`;
+    const entries = await listPondHistory(pondId);
+    statusEl.textContent = `พบ ${entries.length} รายการ (จาก records)`;
     statusEl.className = 'status-txt ok';
     const table = document.createElement('table');
     table.className = 'edit-table';
     table.innerHTML = `
-      <thead><tr><th>วันที่</th><th>ฟาร์ม</th><th>สถานะ</th><th>ระดับ</th></tr></thead>
+      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>ไซส์</th><th>อาหาร/วัน</th><th>อัตรารอด</th><th>โน้ต</th></tr></thead>
       <tbody>
         ${entries
           .map(
             (e) => `
-          <tr class="${{ critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[e.severity] || ''}">
-            <td>${escapeAttr(e.dateRaw || e.dateISO || '-')}</td>
-            <td>${escapeAttr(e.farm || '-')}</td>
-            <td>${escapeAttr(e.status || '-')}</td>
-            <td>${escapeAttr(e.severity || '-')}</td>
+          <tr class="${{ critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[e.pathogenSeverity] || ''}">
+            <td>${escapeAttr(e.weekDate || '-')}</td>
+            <td>${escapeAttr(e.pathogenStatus || '-')}</td>
+            <td>${escapeAttr(e.pathogenSeverity || '-')}</td>
+            <td>${escapeAttr(e.sizeCount ?? '-')}</td>
+            <td>${escapeAttr(e.feedPerDay ?? '-')}</td>
+            <td>${escapeAttr(e.survivalRate ?? '-')}</td>
+            <td>${escapeAttr(e.note || '-')}</td>
           </tr>`
           )
           .join('')}

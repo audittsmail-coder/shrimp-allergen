@@ -65,6 +65,32 @@ export function isConnected() {
   return !!dbInstance;
 }
 
+// Ponds are pre-registered by the existing farm-management app (collection `ponds`,
+// each doc has a `name` field like "303" — farm digit + 2-digit pond number). We look
+// up that doc id so pathogen results attach to the same pond record the other app uses.
+async function findPondIdByName(pondNo) {
+  const s = await loadSdk();
+  const q = s.query(s.collection(dbInstance, 'ponds'), s.where('name', '==', String(pondNo)), s.limit(1));
+  const snap = await s.getDocs(q);
+  return snap.empty ? null : snap.docs[0].id;
+}
+
+// Weekly records already exist per pond+week (growth/feed data) in `records`. Pathogen
+// results are merged into that same weekly doc when one exists for the pond+date, or
+// create a new one otherwise — so the existing app's per-pond/week list picks it up
+// without needing a separate query.
+async function upsertPathogenFields(pondId, weekDate, fields) {
+  const s = await loadSdk();
+  const recordsCol = s.collection(dbInstance, 'records');
+  const q = s.query(recordsCol, s.where('pondId', '==', pondId), s.where('weekDate', '==', weekDate), s.limit(1));
+  const snap = await s.getDocs(q);
+  if (!snap.empty) {
+    await s.updateDoc(snap.docs[0].ref, { ...fields, updatedAt: Date.now() });
+  } else {
+    await s.addDoc(recordsCol, { pondId, weekDate, ...fields, createdAt: s.serverTimestamp(), updatedAt: Date.now() });
+  }
+}
+
 export async function saveReport(parsed) {
   const s = await loadSdk();
   if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
@@ -83,25 +109,28 @@ export async function saveReport(parsed) {
     compareTables: parsed.compareTables,
   });
 
-  // Denormalize into pondHistory/{pondNo}/entries so per-pond weekly trends
-  // can be queried directly without scanning every report document.
-  await Promise.all(
-    parsed.ponds.map((p) => {
-      const entriesCol = s.collection(dbInstance, 'pondHistory', String(p.pondNo), 'entries');
-      return s.addDoc(entriesCol, {
-        createdAt: s.serverTimestamp(),
-        reportId: reportDoc.id,
-        farm: p.farm,
-        status: p.status,
-        severity: p.severity,
-        worsened: p.worsened,
-        dateRaw: p.dateRaw,
-        dateISO: p.dateISO,
-      });
-    })
-  );
+  // Merge each pond's pathogen status into the matching `records` doc (by pondId + weekDate)
+  // so the existing farm app's weekly-record view shows it alongside growth/feed data.
+  const unmatchedPonds = [];
+  for (const p of parsed.ponds) {
+    if (!p.dateISO) {
+      unmatchedPonds.push(p.pondNo);
+      continue;
+    }
+    const pondId = await findPondIdByName(p.pondNo);
+    if (!pondId) {
+      unmatchedPonds.push(p.pondNo);
+      continue;
+    }
+    await upsertPathogenFields(pondId, p.dateISO, {
+      pathogenStatus: p.status,
+      pathogenSeverity: p.severity,
+      pathogenWorsened: p.worsened,
+      pathogenReportId: reportDoc.id,
+    });
+  }
 
-  return reportDoc.id;
+  return { reportId: reportDoc.id, unmatchedPonds };
 }
 
 export async function listReports() {
@@ -112,13 +141,24 @@ export async function listReports() {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function listPondHistory(pondNo) {
+export async function listPonds() {
   const s = await loadSdk();
   if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
-  const q = s.query(
-    s.collection(dbInstance, 'pondHistory', String(pondNo), 'entries'),
-    s.orderBy('dateISO', 'asc')
-  );
+  const snap = await s.getDocs(s.collection(dbInstance, 'ponds'));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+export async function listPondHistory(pondId) {
+  const s = await loadSdk();
+  if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
+  // Sorted client-side (rather than orderBy in the query) so this doesn't need a
+  // composite Firestore index — an equality filter + orderBy on a different field
+  // would otherwise require one to be created manually in the console.
+  const q = s.query(s.collection(dbInstance, 'records'), s.where('pondId', '==', pondId));
   const snap = await s.getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => String(a.weekDate || '').localeCompare(String(b.weekDate || '')));
 }

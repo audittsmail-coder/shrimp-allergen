@@ -42,7 +42,10 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow read, write: if request.auth != null;
     }
-    match /pondHistory/{pondNo}/entries/{entryId} {
+    match /ponds/{pondId} {
+      allow read: if request.auth != null;
+    }
+    match /records/{recordId} {
       allow read, write: if request.auth != null;
     }
   }
@@ -51,11 +54,27 @@ service cloud.firestore {
 
 ## โครงสร้างข้อมูลใน Firestore
 
-- คอลเลกชัน `reports/{autoId}` — 1 เอกสารต่อการนำเข้อ 1 ครั้ง เก็บ title/เขต/รอบ, รายการบ่อทั้งหมด
-  (`ponds[]`), การแจ้งเตือน (`alerts[]`), ข่าวดี (`goodNews[]`), คำแนะนำ (`recommendations[]`)
-  และตารางเทียบผลดิบ (`compareTables[]`)
-- คอลเลกชัน `pondHistory/{pondNo}/entries/{autoId}` — บันทึกแยกรายบ่อ (คัดลอกมาจาก `ponds[]`
-  ตอนบันทึก) ใช้สำหรับหน้าจอ "เทรนด์รายบ่อ" โดยไม่ต้องสแกนทุกรายงาน
+แอปนี้เชื่อมกับ Firestore ของ**อีกแอปที่มีอยู่แล้ว** (แอปจัดการบ่อ/บันทึกการเจริญเติบโตรายสัปดาห์)
+โดยใช้คอลเลกชันร่วมกัน 2 ตัว แทนที่จะสร้างชุดข้อมูลแยกของตัวเอง:
+
+- **`ponds/{pondId}`** (มีอยู่แล้ว, อ่านอย่างเดียว) — เอกสาร 1 อันต่อ 1 บ่อ มีฟิลด์ `name`
+  (เลขบ่อ 3 หลัก เช่น `"303"` = ฟาร์ม 3 บ่อ 03), `farmId`, `species`, `brand`, `releaseDate`,
+  `releaseCount` แอปนี้ค้นหา `pondId` จากเลขบ่อที่ parse ได้ โดยเทียบกับฟิลด์ `name`
+- **`records/{recordId}`** (มีอยู่แล้ว ใช้ร่วมกับแอปเดิม) — เอกสาร 1 อันต่อ 1 บ่อต่อ 1 สัปดาห์
+  (`pondId` + `weekDate`) เดิมเก็บข้อมูลการเจริญเติบโต/ให้อาหาร (`sizeCount`, `feedPerDay`,
+  `survivalRate`, `note`) แอปนี้จะ **ค้นหาเอกสารที่ `pondId`+`weekDate` ตรงกันก่อน** ถ้าเจอจะ
+  merge ฟิลด์ผลเชื้อเข้าไปในเอกสารเดิม ถ้ายังไม่เจอจะสร้างเอกสารใหม่ (มีแค่ฟิลด์ผลเชื้อ)
+  ฟิลด์ที่เพิ่มเข้าไป: `pathogenStatus` (ข้อความสถานะ), `pathogenSeverity`
+  (`normal`/`watch`/`critical`), `pathogenWorsened` (bool), `pathogenReportId`
+  (อ้างอิงกลับไปที่เอกสารใน `reports`)
+- **`reports/{autoId}`** (คอลเลกชันใหม่ เฉพาะแอปนี้) — เก็บ log การนำเข้าแต่ละครั้งแบบเต็ม
+  (title/เขต/รอบ, รายการบ่อทั้งหมด, การแจ้งเตือน `alerts[]`, ข่าวดี `goodNews[]`, คำแนะนำ
+  `recommendations[]`, ตารางเทียบผลดิบ `compareTables[]`) ใช้แสดงในแท็บ "ประวัติรายสัปดาห์"
+  ของแอปนี้เอง ไม่กระทบแอปเดิม
+
+**สำคัญ:** ถ้าเลขบ่อในรายงานไม่ตรงกับ `ponds.name` ใดเลย (เช่น บ่อใหม่ที่ยังไม่ได้ลงทะเบียนใน
+แอปจัดการบ่อ) แอปนี้จะข้ามบ่อนั้นและแจ้งเตือนหลังกดบันทึก — ต้องไปเพิ่มบ่อนั้นในแอปจัดการบ่อก่อน
+แล้วค่อยนำเข้ารายงานนี้ซ้ำ
 
 ## การใช้งานรายสัปดาห์
 
