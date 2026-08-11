@@ -1,15 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap');
 
 :root{
-  --deep: #0a2e36;
-  --teal: #0f5c5c;
-  --aqua: #1d8a8a;
+  --deep: #0a1a33;
+  --teal: #163f7a;
+  --aqua: #2f74c4;
   --sand: #f4ecd8;
   --paper: #fbf7ee;
   --coral: #e15a4d;
   --amber: #e8a23b;
   --good: #2f9e6e;
-  --line: rgba(10,46,54,0.12);
+  --line: rgba(10,26,51,0.12);
 }
 
 *{box-sizing:border-box; margin:0; padding:0;}
