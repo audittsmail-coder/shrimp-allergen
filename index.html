@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>บันทึกผลเชื้อรายสัปดาห์ — อนันต์ฟาร์ม</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">ระบบบันทึกผลตรวจเชื้อ</div>
+    <h1>บันทึกผลเชื้อรายสัปดาห์</h1>
+    <div class="meta" id="connStatus">
+      <div>สถานะ Firebase: <b id="fbStatusText">ยังไม่ได้ตั้งค่า</b></div>
+    </div>
+    <button id="openSettingsBtn" class="btn-ghost">⚙️ ตั้งค่า Firebase</button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="import">📥 นำเข้ารายงาน</button>
+    <button class="tab-btn" data-tab="history">🗂️ ประวัติรายสัปดาห์</button>
+    <button class="tab-btn" data-tab="trend">📈 เทรนด์รายบ่อ</button>
+  </nav>
+
+  <!-- IMPORT TAB -->
+  <section id="tab-import" class="tab-panel active">
+    <div class="section">
+      <div class="section-label">วางไฟล์ HTML รายงาน<div class="dash"></div></div>
+      <div class="drop-row">
+        <input type="file" id="fileInput" accept=".html,.htm" />
+        <span class="or">หรือ</span>
+        <button id="pasteBtn" class="btn-secondary">วางข้อความ HTML</button>
+      </div>
+      <textarea id="htmlInput" placeholder="วางเนื้อหา HTML ของรายงานที่นี่ แล้วกด &quot;แยกข้อมูล&quot;" style="display:none;"></textarea>
+      <div class="action-row">
+        <button id="parseBtn" class="btn-primary">🔍 แยกข้อมูล</button>
+        <span id="parseStatus" class="status-txt"></span>
+      </div>
+    </div>
+
+    <div id="previewArea" class="section" style="display:none;">
+      <div class="section-label">ตรวจสอบข้อมูลก่อนบันทึก<div class="dash"></div></div>
+      <div class="meta-edit">
+        <label>หัวข้อรายงาน <input type="text" id="metaTitle" /></label>
+        <label>เขต <input type="text" id="metaDistrict" /></label>
+        <label>รอบ/ช่วงเวลา <input type="text" id="metaRound" /></label>
+      </div>
+
+      <div class="section-label small">สถานะรายบ่อ (แก้ไขได้)<div class="dash"></div></div>
+      <div class="table-scroll">
+        <table id="pondTable" class="edit-table">
+          <thead>
+            <tr>
+              <th>ฟาร์ม</th>
+              <th>บ่อ</th>
+              <th>วันที่</th>
+              <th>สถานะ / ผลเชื้อ</th>
+              <th>ระดับ</th>
+              <th>แย่ลง?</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="pondTableBody"></tbody>
+        </table>
+      </div>
+      <button id="addRowBtn" class="btn-secondary small">+ เพิ่มแถว</button>
+
+      <div class="section-label small">รายละเอียดเพิ่มเติมที่ตรวจพบ<div class="dash"></div></div>
+      <div id="extraSummary" class="extra-summary"></div>
+
+      <div class="action-row">
+        <button id="saveBtn" class="btn-primary">💾 บันทึกลง Firebase</button>
+        <span id="saveStatus" class="status-txt"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY TAB -->
+  <section id="tab-history" class="tab-panel">
+    <div class="section">
+      <div class="section-label">รายงานที่บันทึกไว้<div class="dash"></div></div>
+      <div class="action-row">
+        <button id="refreshHistoryBtn" class="btn-secondary">🔄 โหลดใหม่</button>
+        <span id="historyStatus" class="status-txt"></span>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </div>
+  </section>
+
+  <!-- TREND TAB -->
+  <section id="tab-trend" class="tab-panel">
+    <div class="section">
+      <div class="section-label">เลือกบ่อเพื่อดูเทรนด์<div class="dash"></div></div>
+      <div class="action-row">
+        <select id="pondSelect"><option value="">-- เลือกบ่อ --</option></select>
+        <span id="trendStatus" class="status-txt"></span>
+      </div>
+      <div id="trendResult" class="table-scroll"></div>
+    </div>
+  </section>
+
+  <div class="bottom-space"></div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settingsModal" class="modal-backdrop" style="display:none;">
+  <div class="modal">
+    <div class="modal-title">⚙️ ตั้งค่า Firebase</div>
+    <p class="modal-desc">วาง Firebase config (จากหน้า Project settings ในคอนโซล Firebase) เป็น JSON ด้านล่าง ข้อมูลนี้จะถูกเก็บไว้ในเบราว์เซอร์ของคุณเท่านั้น (localStorage) จะไม่ถูกบันทึกลงโค้ด</p>
+    <textarea id="firebaseConfigInput" placeholder='{
+  "apiKey": "...",
+  "authDomain": "...",
+  "projectId": "...",
+  "storageBucket": "...",
+  "messagingSenderId": "...",
+  "appId": "..."
+}'></textarea>
+    <div class="modal-actions">
+      <button id="saveConfigBtn" class="btn-primary">บันทึกและเชื่อมต่อ</button>
+      <button id="closeSettingsBtn" class="btn-secondary">ปิด</button>
+    </div>
+    <div id="configStatus" class="status-txt"></div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
