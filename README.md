@@ -13,18 +13,23 @@
 - `app.js` — เชื่อม UI เข้ากับ parser และ firebase
 - `style.css` — ธีมสี/ฟอนต์ให้ใกล้เคียงกับรายงานต้นฉบับ
 
-## วิธีตั้งค่า Firebase (ทำครั้งเดียว)
+## การตั้งค่า Firebase
 
-1. ไปที่ [Firebase Console](https://console.firebase.google.com) → สร้างโปรเจกต์ (หรือใช้โปรเจกต์เดิม)
-2. เปิดใช้งาน **Firestore Database** (โหมด production หรือ test ก็ได้ จะตั้ง rule เองด้านล่าง)
-3. เปิดใช้งาน **Authentication → Sign-in method → Anonymous** (แอปนี้ใช้ anonymous auth
+โปรเจกต์ Firebase (`shrimp-farm-data`) ถูกตั้งเป็นค่าเริ่มต้นไว้ใน `firebase.js` แล้ว (`DEFAULT_CONFIG`)
+เปิดแอปแล้วเชื่อมต่อได้เลยโดยไม่ต้องกรอกอะไรเพิ่ม — ค่านี้เป็น Firebase **web config** ซึ่งไม่ใช่ความลับ
+(ระบุแค่ว่าเชื่อมโปรเจกต์ไหน การเข้าถึงจริงถูกควบคุมด้วย Firestore security rules + Auth ด้านล่าง
+ไม่ใช่ด้วยการซ่อนค่านี้) จึงฝังไว้ในโค้ดได้อย่างปลอดภัย
+
+ก่อนใช้งานจริง ให้ไปที่ [Firebase Console](https://console.firebase.google.com/project/shrimp-farm-data)
+แล้วตรวจสอบว่าเปิดใช้งานสิ่งเหล่านี้แล้ว:
+
+1. **Firestore Database** (โหมด production หรือ test ก็ได้ จะตั้ง rule เองด้านล่าง)
+2. **Authentication → Sign-in method → Anonymous** (แอปนี้ใช้ anonymous auth
    เพื่อให้ทุกคนที่เปิดแอปเขียนข้อมูลได้โดยไม่ต้องมีระบบ login แยก)
-4. ไปที่ Project settings → General → เลื่อนลงมาที่ "Your apps" → เพิ่มเว็บแอป (ไอคอน `</>`) →
-   คัดลอกค่า `firebaseConfig` object
-5. เปิดแอปนี้ → กด **⚙️ ตั้งค่า Firebase** ที่มุมขวาบน → วางค่า config (เป็น JSON) → กด "บันทึกและเชื่อมต่อ"
 
-ค่า config จะถูกเก็บไว้ใน `localStorage` ของเบราว์เซอร์เท่านั้น **ไม่ได้ถูกเขียนลงในโค้ด/คอมมิต**
-ดังนั้นทุกเครื่อง/เบราว์เซอร์ที่เปิดแอปต้องตั้งค่านี้เอง 1 ครั้ง
+ถ้าต้องการใช้โปรเจกต์ Firebase อื่นแทน (เช่น เปิดจากเครื่อง/บัญชีอื่น) กด **⚙️ ตั้งค่า Firebase**
+มุมขวาบนของแอป แล้ววาง config ของโปรเจกต์นั้นแทนได้ ค่าที่ใส่เองจะถูกเก็บไว้ใน `localStorage`
+ของเบราว์เซอร์นั้นๆ และมีผลเหนือค่าเริ่มต้นในโค้ด
 
 ### กฎความปลอดภัย Firestore (แนะนำ)
 

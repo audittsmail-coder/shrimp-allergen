@@ -1,9 +1,21 @@
 // Thin wrapper around the Firebase modular SDK (loaded from CDN so no build step is needed).
-// Firebase config is supplied by the user at runtime via the Settings modal and kept only in
-// localStorage — it is never hardcoded here, so nothing secret ends up committed to the repo.
+// Firebase web config identifies the project (it is not a secret — access is enforced by
+// Firestore security rules + Auth, not by hiding this value), so it's fine to ship a default
+// here. Users can still override it per-browser via the Settings modal (kept in localStorage).
 
 const SDK_VERSION = '10.13.0';
 const CONFIG_KEY = 'shrimpLog.firebaseConfig';
+
+const DEFAULT_CONFIG = {
+  apiKey: "AIzaSyCvcR6a4LEKq-7TsSlrMYXP4bh3TwZY-NI",
+  authDomain: "shrimp-farm-data.firebaseapp.com",
+  databaseURL: "https://shrimp-farm-data-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "shrimp-farm-data",
+  storageBucket: "shrimp-farm-data.firebasestorage.app",
+  messagingSenderId: "105951477051",
+  appId: "1:105951477051:web:de134a245b683625304b1e",
+  measurementId: "G-X7GS4YD4WK",
+};
 
 let appInstance = null;
 let dbInstance = null;
@@ -12,11 +24,11 @@ let sdk = null;
 
 export function getStoredConfig() {
   const raw = localStorage.getItem(CONFIG_KEY);
-  if (!raw) return null;
+  if (!raw) return DEFAULT_CONFIG;
   try {
     return JSON.parse(raw);
   } catch {
-    return null;
+    return DEFAULT_CONFIG;
   }
 }
 
