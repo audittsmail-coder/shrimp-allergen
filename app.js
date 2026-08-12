@@ -13,12 +13,15 @@ import {
   clearAllPathogenData,
 } from './firebase.js';
 
-let registeredPondNames = null; // Set of pond `name`s from the `ponds` collection, cached per session
+let registeredPondNames = null; // Set of leading pond numbers from the `ponds` collection, cached per session
 
+// Pond names in the farm app may carry a nickname suffix (e.g. "101(น้ำเตี้ย)"); only the
+// leading number identifies the pond, so that's what this preview-filter compares against
+// (matches the prefix-based lookup firebase.js uses when it actually saves).
 async function getRegisteredPondNames() {
   if (registeredPondNames) return registeredPondNames;
   const ponds = await listPonds();
-  registeredPondNames = new Set(ponds.map((p) => String(p.name)));
+  registeredPondNames = new Set(ponds.map((p) => (String(p.name).match(/^\d+/) || [String(p.name)])[0]));
   return registeredPondNames;
 }
 

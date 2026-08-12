@@ -66,11 +66,19 @@ export function isConnected() {
 }
 
 // Ponds are pre-registered by the existing farm-management app (collection `ponds`,
-// each doc has a `name` field like "303" — farm digit + 2-digit pond number). We look
-// up that doc id so pathogen results attach to the same pond record the other app uses.
+// each doc has a `name` field starting with "303" — farm digit + 2-digit pond number —
+// but may carry a nickname suffix the farm app appends, e.g. "101(น้ำเตี้ย)". We match
+// on that leading pond number only (a Firestore prefix range query), ignoring whatever
+// comes after it, so pathogen results still attach to the right pond doc either way.
 async function findPondIdByName(pondNo) {
   const s = await loadSdk();
-  const q = s.query(s.collection(dbInstance, 'ponds'), s.where('name', '==', String(pondNo)), s.limit(1));
+  const prefix = String(pondNo);
+  const q = s.query(
+    s.collection(dbInstance, 'ponds'),
+    s.where('name', '>=', prefix),
+    s.where('name', '<', prefix + ''),
+    s.limit(1)
+  );
   const snap = await s.getDocs(q);
   return snap.empty ? null : snap.docs[0].id;
 }
