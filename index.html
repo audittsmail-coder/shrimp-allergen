@@ -24,7 +24,6 @@
     <div class="meta" id="connStatus">
       <div>สถานะ Firebase: <b id="fbStatusText">ยังไม่ได้ตั้งค่า</b></div>
     </div>
-    <button id="openSettingsBtn" class="btn-ghost">⚙️ ตั้งค่า Firebase</button>
   </header>
 
   <nav class="tabs">
@@ -92,8 +91,10 @@
       <div class="section-label">รายงานที่บันทึกไว้<div class="dash"></div></div>
       <div class="action-row">
         <button id="refreshHistoryBtn" class="btn-secondary">🔄 โหลดใหม่</button>
+        <button id="clearAllPathogenBtn" class="btn-secondary small" style="margin-top:0; color:var(--coral); border-color:var(--coral);">🗑️ ล้างข้อมูลผลเชื้อทั้งหมด</button>
         <span id="historyStatus" class="status-txt"></span>
       </div>
+      <div id="clearAllStatus" class="status-txt"></div>
       <div id="historyList" class="history-list"></div>
     </div>
   </section>
@@ -112,35 +113,6 @@
   </section>
 
   <div class="bottom-space"></div>
-</div>
-
-<!-- SETTINGS MODAL -->
-<div id="settingsModal" class="modal-backdrop" style="display:none;">
-  <div class="modal">
-    <div class="modal-title">⚙️ ตั้งค่า Firebase</div>
-    <p class="modal-desc">วาง Firebase config (จากหน้า Project settings ในคอนโซล Firebase) เป็น JSON ด้านล่าง ข้อมูลนี้จะถูกเก็บไว้ในเบราว์เซอร์ของคุณเท่านั้น (localStorage) จะไม่ถูกบันทึกลงโค้ด</p>
-    <textarea id="firebaseConfigInput" placeholder='{
-  "apiKey": "...",
-  "authDomain": "...",
-  "projectId": "...",
-  "storageBucket": "...",
-  "messagingSenderId": "...",
-  "appId": "..."
-}'></textarea>
-    <div class="modal-actions">
-      <button id="saveConfigBtn" class="btn-primary">บันทึกและเชื่อมต่อ</button>
-      <button id="closeSettingsBtn" class="btn-secondary">ปิด</button>
-    </div>
-    <div id="configStatus" class="status-txt"></div>
-
-    <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--line);">
-      <div class="modal-title" style="font-size:14px;">🗑️ ล้างข้อมูลผลเชื้อทั้งหมด</div>
-      <p class="modal-desc">ลบผลเชื้อ (pathogenStatus/pathogenSeverity) ออกจากทุกบ่อทุกสัปดาห์ และลบประวัติการนำเข้ารายงานทั้งหมดของแอปนี้
-        <b>ไม่ลบ</b>ข้อมูลไซส์/อาหาร/อัตรารอดที่แอปจัดการบ่อบันทึกไว้ การกระทำนี้ย้อนกลับไม่ได้</p>
-      <button id="clearAllPathogenBtn" class="btn-secondary" style="width:100%; color:var(--coral); border-color:var(--coral);">ล้างข้อมูลผลเชื้อทั้งหมด</button>
-      <div id="clearAllStatus" class="status-txt"></div>
-    </div>
-  </div>
 </div>
 
 <script type="module" src="app.js"></script>

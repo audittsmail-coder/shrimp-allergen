@@ -1,10 +1,9 @@
 // Thin wrapper around the Firebase modular SDK (loaded from CDN so no build step is needed).
 // Firebase web config identifies the project (it is not a secret — access is enforced by
-// Firestore security rules + Auth, not by hiding this value), so it's fine to ship a default
-// here. Users can still override it per-browser via the Settings modal (kept in localStorage).
+// Firestore security rules + Auth, not by hiding this value), so it's fine to ship it here
+// directly rather than requiring a manual setup step.
 
 const SDK_VERSION = '10.13.0';
-const CONFIG_KEY = 'shrimpLog.firebaseConfig';
 
 const DEFAULT_CONFIG = {
   apiKey: "AIzaSyCvcR6a4LEKq-7TsSlrMYXP4bh3TwZY-NI",
@@ -23,17 +22,7 @@ let authInstance = null;
 let sdk = null;
 
 export function getStoredConfig() {
-  const raw = localStorage.getItem(CONFIG_KEY);
-  if (!raw) return DEFAULT_CONFIG;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return DEFAULT_CONFIG;
-  }
-}
-
-export function storeConfig(config) {
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  return DEFAULT_CONFIG;
 }
 
 async function loadSdk() {

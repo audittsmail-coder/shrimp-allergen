@@ -1,7 +1,6 @@
 import { parseReportHtml } from './parser.js';
 import {
   getStoredConfig,
-  storeConfig,
   connect,
   isConnected,
   saveReport,
@@ -42,54 +41,12 @@ $$('.tab-btn').forEach((btn) => {
   });
 });
 
-// ---------- Settings / Firebase connection ----------
+// ---------- Firebase connection ----------
 function setFbStatus(text, cls) {
   const el = $('#fbStatusText');
   el.textContent = text;
   el.className = cls || '';
 }
-
-$('#openSettingsBtn').addEventListener('click', () => {
-  const cfg = getStoredConfig();
-  if (cfg) $('#firebaseConfigInput').value = JSON.stringify(cfg, null, 2);
-  $('#settingsModal').style.display = 'flex';
-});
-$('#closeSettingsBtn').addEventListener('click', () => {
-  $('#settingsModal').style.display = 'none';
-});
-
-$('#saveConfigBtn').addEventListener('click', async () => {
-  const raw = $('#firebaseConfigInput').value.trim();
-  const statusEl = $('#configStatus');
-  let cfg;
-  try {
-    cfg = JSON.parse(raw);
-  } catch {
-    statusEl.textContent = 'รูปแบบ JSON ไม่ถูกต้อง';
-    statusEl.className = 'status-txt err';
-    return;
-  }
-  if (!cfg.apiKey || !cfg.projectId) {
-    statusEl.textContent = 'ต้องมี apiKey และ projectId อย่างน้อย';
-    statusEl.className = 'status-txt err';
-    return;
-  }
-  statusEl.textContent = 'กำลังเชื่อมต่อ...';
-  statusEl.className = 'status-txt';
-  try {
-    await connect(cfg);
-    storeConfig(cfg);
-    statusEl.textContent = 'เชื่อมต่อสำเร็จ ✅';
-    statusEl.className = 'status-txt ok';
-    setFbStatus('เชื่อมต่อแล้ว ✅', 'status-txt ok');
-    setTimeout(() => {
-      $('#settingsModal').style.display = 'none';
-    }, 700);
-  } catch (err) {
-    statusEl.textContent = 'เชื่อมต่อไม่สำเร็จ: ' + err.message;
-    statusEl.className = 'status-txt err';
-  }
-});
 
 $('#clearAllPathogenBtn').addEventListener('click', async () => {
   const statusEl = $('#clearAllStatus');
