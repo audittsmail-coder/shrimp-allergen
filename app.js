@@ -81,10 +81,6 @@ $('#clearAllPathogenBtn').addEventListener('click', async () => {
 
 async function autoConnect() {
   const cfg = getStoredConfig();
-  if (!cfg) {
-    setFbStatus('ยังไม่ได้ตั้งค่า — กด ⚙️ ตั้งค่า Firebase', '');
-    return;
-  }
   setFbStatus('กำลังเชื่อมต่อ...', '');
   try {
     await connect(cfg);
@@ -220,6 +216,8 @@ function addPondRow(p = {}) {
         <option value="critical" ${p.severity === 'critical' ? 'selected' : ''}>วิกฤต</option>
       </select>
     </td>
+    <td><input type="number" step="0.01" class="f-ammonia" placeholder="mg/L" value="${p.ammonia ?? ''}" /></td>
+    <td><input type="number" step="0.01" class="f-nitrite" placeholder="mg/L" value="${p.nitrite ?? ''}" /></td>
     <td style="text-align:center;"><input type="checkbox" class="f-worse" ${p.worsened ? 'checked' : ''} /></td>
     <td><button type="button" class="row-del">✕</button></td>
   `;
@@ -239,11 +237,15 @@ $('#addRowBtn').addEventListener('click', () => addPondRow());
 function readPondsFromTable() {
   return $$('#pondTableBody tr').map((tr) => {
     const dateISO = tr.querySelector('.f-date').value || null;
+    const ammonia = tr.querySelector('.f-ammonia').value;
+    const nitrite = tr.querySelector('.f-nitrite').value;
     return {
       farm: tr.querySelector('.f-farm').value.trim(),
       pondNo: tr.querySelector('.f-pond').value.trim(),
       status: tr.querySelector('.f-status').value.trim(),
       severity: tr.querySelector('.f-sev').value,
+      ammonia: ammonia !== '' ? parseFloat(ammonia) : null,
+      nitrite: nitrite !== '' ? parseFloat(nitrite) : null,
       worsened: tr.querySelector('.f-worse').checked,
       dateISO,
       dateRaw: dateISO || '',
@@ -254,7 +256,7 @@ function readPondsFromTable() {
 $('#saveBtn').addEventListener('click', async () => {
   const statusEl = $('#saveStatus');
   if (!isConnected()) {
-    statusEl.textContent = 'กรุณาตั้งค่า Firebase ก่อน (กด ⚙️ ด้านบน)';
+    statusEl.textContent = 'กรุณาเชื่อมต่อ Firebase ก่อน';
     statusEl.className = 'status-txt err';
     return;
   }
@@ -284,7 +286,7 @@ $('#saveBtn').addEventListener('click', async () => {
       statusEl.textContent = `บันทึกสำเร็จบางส่วน ⚠️ (รหัส ${reportId}) — ไม่พบบ่อนี้ใน ponds จึงยังไม่ได้เชื่อมผลเชื้อ: ${unmatchedPonds.join(', ')} (ต้องเพิ่มบ่อนี้ในแอปจัดการบ่อก่อน แล้วนำเข้ารายงานนี้ซ้ำ)`;
       statusEl.className = 'status-txt err';
     } else {
-      statusEl.textContent = `บันทึกสำเร็จ ✅ (รหัส ${reportId}) — เชื่อมผลเชื้อเข้ากับ records ของทุกบ่อแล้ว`;
+      statusEl.textContent = `บันทึกสำเร็จ ✅ (รหัส ${reportId}) — เชื่อมผลเชื้อเข้ากับทุกบ่อแล้ว`;
       statusEl.className = 'status-txt ok';
     }
   } catch (err) {
@@ -387,7 +389,7 @@ async function loadTrend(pondId) {
     const table = document.createElement('table');
     table.className = 'edit-table';
     table.innerHTML = `
-      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>แย่ลง?</th><th></th></tr></thead>
+      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>แอมโมเนีย</th><th>ไนไตรท์</th><th>แย่ลง?</th><th></th></tr></thead>
       <tbody>
         ${entries
           .map(
@@ -396,6 +398,8 @@ async function loadTrend(pondId) {
             <td>${escapeAttr(e.weekDate || '-')}</td>
             <td>${escapeAttr(e.status || '-')}</td>
             <td>${escapeAttr(e.severity || '-')}</td>
+            <td>${e.ammonia != null ? escapeAttr(e.ammonia) + ' mg/L' : '-'}</td>
+            <td>${e.nitrite != null ? escapeAttr(e.nitrite) + ' mg/L' : '-'}</td>
             <td style="text-align:center;">${e.worsened ? '▲' : ''}</td>
             <td><button type="button" class="row-del trend-del-btn">ลบ</button></td>
           </tr>`

@@ -88,6 +88,8 @@ async function attachPathogenToPond(pondId, p, reportId) {
     status: p.status,
     severity: p.severity,
     worsened: !!p.worsened,
+    ammonia: p.ammonia ?? null,
+    nitrite: p.nitrite ?? null,
     reportId: reportId || null,
   };
   await s.updateDoc(ref, {
@@ -95,6 +97,8 @@ async function attachPathogenToPond(pondId, p, reportId) {
     pathogenSeverity: entry.severity,
     pathogenWorsened: entry.worsened,
     pathogenDate: entry.weekDate,
+    pathogenAmmonia: entry.ammonia,
+    pathogenNitrite: entry.nitrite,
     pathogenReportId: entry.reportId,
     pathogenHistory: s.arrayUnion(entry),
   });
@@ -171,6 +175,8 @@ function recomputeLatestFields(history) {
     pathogenSeverity: latest.severity,
     pathogenWorsened: !!latest.worsened,
     pathogenDate: latest.weekDate,
+    pathogenAmmonia: latest.ammonia ?? null,
+    pathogenNitrite: latest.nitrite ?? null,
     pathogenReportId: latest.reportId || null,
   };
 }
@@ -181,6 +187,8 @@ function clearLatestFieldsUpdate(s) {
     pathogenSeverity: s.deleteField(),
     pathogenWorsened: s.deleteField(),
     pathogenDate: s.deleteField(),
+    pathogenAmmonia: s.deleteField(),
+    pathogenNitrite: s.deleteField(),
     pathogenReportId: s.deleteField(),
   };
 }

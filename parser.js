@@ -38,6 +38,23 @@ function sevFromClass(el) {
   return 'unknown';
 }
 
+// Best-effort extraction of water-quality readings when a report happens to mention them
+// in a pond's status text or alert description (e.g. "แอมโมเนีย 0.5 mg/L") — the sample
+// report doesn't include these at all, so this mostly matters for future report formats.
+// Falls back to null (left blank for manual entry in the preview table) when not found.
+function extractNumberAfterLabel(text, labelPattern) {
+  const re = new RegExp(labelPattern + '[^0-9]{0,10}(\\d+(?:\\.\\d+)?)');
+  const m = text.match(re);
+  return m ? parseFloat(m[1]) : null;
+}
+
+function extractWaterQuality(text) {
+  return {
+    ammonia: extractNumberAfterLabel(text, 'แอมโมเนีย'),
+    nitrite: extractNumberAfterLabel(text, 'ไนไตร(?:ท์)?'),
+  };
+}
+
 export function parseReportHtml(htmlString) {
   const doc = new DOMParser().parseFromString(htmlString, 'text/html');
   const contextYearBE = currentBEYear();
@@ -119,6 +136,21 @@ export function parseReportHtml(htmlString) {
         stats,
       });
     }
+  });
+
+  // Merge in any water-quality readings mentioned in a pond's own status text or in an
+  // alert about that pond (matched by pond number), so they don't need re-typing by hand
+  // when the report happens to include them.
+  const alertTextByPond = {};
+  alerts.forEach((a) => {
+    if (!a.pondNo) return;
+    alertTextByPond[a.pondNo] = `${alertTextByPond[a.pondNo] || ''} ${a.title} ${a.desc}`;
+  });
+  ponds.forEach((p) => {
+    const combinedText = `${p.status} ${alertTextByPond[p.pondNo] || ''}`;
+    const wq = extractWaterQuality(combinedText);
+    p.ammonia = wq.ammonia;
+    p.nitrite = wq.nitrite;
   });
 
   // Good news items.
