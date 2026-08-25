@@ -153,6 +153,44 @@ export function parseReportHtml(htmlString) {
     p.nitrite = wq.nitrite;
   });
 
+  // Some reports include a dedicated water-quality table (class `.wq-table`) instead of
+  // mentioning ammonia/nitrite in a pond's status text — a header row (บ่อ / NH₃ รวม /
+  // NH₃ พิษ / NO₂ / แคลเซียม ...) plus one data row per pond, with occasional colspan
+  // "farm group" header rows mixed in. Column position is derived from the header text
+  // (rather than assumed fixed) so this still works if columns get reordered, and these
+  // readings take precedence over anything found in free text since a dedicated table is
+  // the more reliable source.
+  const waterQualityByPond = {};
+  doc.querySelectorAll('.wq-table').forEach((table) => {
+    const headerCells = Array.from(table.querySelectorAll('thead th'));
+    const headers = headerCells.map((th) => (th.firstChild ? th.firstChild.textContent : th.textContent).replace(/\s+/g, ' ').trim());
+    const ammoniaCol = headers.findIndex((h) => /รวม/.test(h) && /(NH|แอมโมเนีย)/i.test(h));
+    const nitriteCol = headers.findIndex((h) => /(NO.?2|NO₂|ไนไตร)/i.test(h));
+
+    table.querySelectorAll('tbody tr').forEach((tr) => {
+      if (tr.classList.contains('farm-row-header')) return;
+      const cells = Array.from(tr.querySelectorAll('td'));
+      if (!cells.length) return;
+      const pondMatch = cells[0].textContent.match(/\d+/);
+      if (!pondMatch) return;
+      const parseCell = (idx) => {
+        if (idx == null || idx < 0 || !cells[idx]) return null;
+        const digits = cells[idx].textContent.replace(/[^\d.]/g, '');
+        return digits ? parseFloat(digits) : null;
+      };
+      waterQualityByPond[pondMatch[0]] = {
+        ammonia: parseCell(ammoniaCol),
+        nitrite: parseCell(nitriteCol),
+      };
+    });
+  });
+  ponds.forEach((p) => {
+    const wq = waterQualityByPond[p.pondNo];
+    if (!wq) return;
+    if (wq.ammonia != null) p.ammonia = wq.ammonia;
+    if (wq.nitrite != null) p.nitrite = wq.nitrite;
+  });
+
   // Good news items.
   const goodNews = [];
   doc.querySelectorAll('.issue-grid .issue').forEach((el) => {
