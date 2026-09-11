@@ -218,6 +218,9 @@ function addPondRow(p = {}) {
     </td>
     <td><input type="number" step="0.01" class="f-ammonia" placeholder="mg/L" value="${p.ammonia ?? ''}" /></td>
     <td><input type="number" step="0.01" class="f-nitrite" placeholder="mg/L" value="${p.nitrite ?? ''}" /></td>
+    <td><input type="number" step="0.01" class="f-ph" placeholder="pH" value="${p.ph ?? ''}" /></td>
+    <td><input type="number" step="1" class="f-alkalinity" placeholder="mg/L" value="${p.alkalinity ?? ''}" /></td>
+    <td><input type="number" step="0.1" class="f-salinity" placeholder="ppt" value="${p.salinity ?? ''}" /></td>
     <td style="text-align:center;"><input type="checkbox" class="f-worse" ${p.worsened ? 'checked' : ''} /></td>
     <td><button type="button" class="row-del">✕</button></td>
   `;
@@ -239,6 +242,9 @@ function readPondsFromTable() {
     const dateISO = tr.querySelector('.f-date').value || null;
     const ammonia = tr.querySelector('.f-ammonia').value;
     const nitrite = tr.querySelector('.f-nitrite').value;
+    const ph = tr.querySelector('.f-ph').value;
+    const alkalinity = tr.querySelector('.f-alkalinity').value;
+    const salinity = tr.querySelector('.f-salinity').value;
     return {
       farm: tr.querySelector('.f-farm').value.trim(),
       pondNo: tr.querySelector('.f-pond').value.trim(),
@@ -246,6 +252,9 @@ function readPondsFromTable() {
       severity: tr.querySelector('.f-sev').value,
       ammonia: ammonia !== '' ? parseFloat(ammonia) : null,
       nitrite: nitrite !== '' ? parseFloat(nitrite) : null,
+      ph: ph !== '' ? parseFloat(ph) : null,
+      alkalinity: alkalinity !== '' ? parseFloat(alkalinity) : null,
+      salinity: salinity !== '' ? parseFloat(salinity) : null,
       worsened: tr.querySelector('.f-worse').checked,
       dateISO,
       dateRaw: dateISO || '',
@@ -389,7 +398,7 @@ async function loadTrend(pondId) {
     const table = document.createElement('table');
     table.className = 'edit-table';
     table.innerHTML = `
-      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>แอมโมเนีย</th><th>ไนไตรท์</th><th>แย่ลง?</th><th></th></tr></thead>
+      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>แอมโมเนีย</th><th>ไนไตรท์</th><th>pH</th><th>ด่าง</th><th>ความเค็ม</th><th>แย่ลง?</th><th></th></tr></thead>
       <tbody>
         ${entries
           .map(
@@ -400,6 +409,9 @@ async function loadTrend(pondId) {
             <td>${escapeAttr(e.severity || '-')}</td>
             <td>${e.ammonia != null ? escapeAttr(e.ammonia) + ' mg/L' : '-'}</td>
             <td>${e.nitrite != null ? escapeAttr(e.nitrite) + ' mg/L' : '-'}</td>
+            <td>${e.ph != null ? escapeAttr(e.ph) : '-'}</td>
+            <td>${e.alkalinity != null ? escapeAttr(e.alkalinity) + ' mg/L' : '-'}</td>
+            <td>${e.salinity != null ? escapeAttr(e.salinity) + ' ppt' : '-'}</td>
             <td style="text-align:center;">${e.worsened ? '▲' : ''}</td>
             <td><button type="button" class="row-del trend-del-btn">ลบ</button></td>
           </tr>`

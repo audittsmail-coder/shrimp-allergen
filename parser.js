@@ -60,7 +60,7 @@ function sevFromStatusElB(card) {
 // null (left blank for manual entry) when not found — callers only use this to fill in
 // values not already found via a more structured source (per-pond params, a dedicated table).
 function extractNumberAfterLabel(text, labelPattern) {
-  const re = new RegExp(labelPattern + '[^0-9]{0,10}(\\d+(?:\\.\\d+)?)');
+  const re = new RegExp(labelPattern + '[^0-9]{0,10}(\\d+(?:\\.\\d+)?)', 'i');
   const m = text.match(re);
   return m ? parseFloat(m[1]) : null;
 }
@@ -69,6 +69,9 @@ function extractWaterQuality(text) {
   return {
     ammonia: extractNumberAfterLabel(text, 'แอมโมเนีย'),
     nitrite: extractNumberAfterLabel(text, 'ไนไตร(?:ท์)?'),
+    ph: extractNumberAfterLabel(text, 'pH'),
+    alkalinity: extractNumberAfterLabel(text, 'ด่าง|อัลค(?:าไลน์|\\.)?'),
+    salinity: extractNumberAfterLabel(text, 'ความเค็ม|salinity'),
   };
 }
 
@@ -176,11 +179,17 @@ export function parseReportHtml(htmlString) {
 
         let ammonia = null;
         let nitrite = null;
+        let ph = null;
+        let alkalinity = null;
+        let salinity = null;
         params.forEach((p) => {
           const n = parseFloat(p.val.replace(/[^\d.]/g, ''));
           if (isNaN(n)) return;
           if (/(NH|แอมโมเนีย)/i.test(p.lbl)) ammonia = n;
           if (/(NO.?2|NO₂|ไนไตร)/i.test(p.lbl)) nitrite = n;
+          if (/ph/i.test(p.lbl)) ph = n;
+          if (/(ด่าง|อัลค|alk)/i.test(p.lbl)) alkalinity = n;
+          if (/(ความเค็ม|salinity)/i.test(p.lbl)) salinity = n;
         });
 
         // An up-arrow defaults to "worse" (red) unless explicitly recolored — a couple of
@@ -197,6 +206,9 @@ export function parseReportHtml(htmlString) {
           dateISO: globalDate.iso,
           ammonia,
           nitrite,
+          ph,
+          alkalinity,
+          salinity,
         });
       });
     });
@@ -236,21 +248,25 @@ export function parseReportHtml(htmlString) {
     alertTextByPond[a.pondNo] = `${alertTextByPond[a.pondNo] || ''} ${a.title} ${a.desc}`;
   });
   ponds.forEach((p) => {
-    if (p.ammonia != null && p.nitrite != null) return;
+    if (p.ammonia != null && p.nitrite != null && p.ph != null && p.alkalinity != null && p.salinity != null) return;
     const combinedText = `${p.status} ${alertTextByPond[p.pondNo] || ''}`;
     const wq = extractWaterQuality(combinedText);
     if (p.ammonia == null) p.ammonia = wq.ammonia;
     if (p.nitrite == null) p.nitrite = wq.nitrite;
+    if (p.ph == null) p.ph = wq.ph;
+    if (p.alkalinity == null) p.alkalinity = wq.alkalinity;
+    if (p.salinity == null) p.salinity = wq.salinity;
   });
 
   // Some reports include a dedicated water-quality table (class `.wq-table`) instead of, or
-  // in addition to, mentioning ammonia/nitrite elsewhere — a header row plus one data row per
-  // pond, with occasional colspan "farm group" header rows mixed in (Template A) or one table
-  // per farm block (Template B). Column position is derived from the header text rather than
-  // assumed fixed: when a report has both an "NH₃ รวม" (total) and "NH₃ พิษ" (toxic) column,
-  // the total one is preferred; when there's just a single plain "NH₃" column, that one is
-  // used directly. These readings win over anything found elsewhere since a dedicated table
-  // is the most reliable source.
+  // in addition to, mentioning ammonia/nitrite/pH/alkalinity/salinity elsewhere — a header row
+  // plus one data row per pond, with occasional colspan "farm group" header rows mixed in
+  // (Template A) or one table per farm block (Template B). Column position is derived from the
+  // header text rather than assumed fixed: when a report has both an "NH₃ รวม" (total) and
+  // "NH₃ พิษ" (toxic) column, the total one is preferred; when there's just a single plain
+  // "NH₃" column, that one is used directly. Not every report includes pH/alkalinity/salinity
+  // columns at all — those simply stay null when absent. These readings win over anything
+  // found elsewhere since a dedicated table is the most reliable source.
   const waterQualityByPond = {};
   doc.querySelectorAll('.wq-table').forEach((table) => {
     const headerCells = Array.from(table.querySelectorAll('thead th'));
@@ -260,6 +276,9 @@ export function parseReportHtml(htmlString) {
     if (nh3Candidates.length === 1) ammoniaCol = nh3Candidates[0].i;
     else if (nh3Candidates.length > 1) ammoniaCol = (nh3Candidates.find(({ h }) => /รวม/.test(h)) || nh3Candidates[0]).i;
     const nitriteCol = headers.findIndex((h) => /(NO.?2|NO₂|ไนไตร)/i.test(h));
+    const phCol = headers.findIndex((h) => /pH|พีเอช/i.test(h));
+    const alkalinityCol = headers.findIndex((h) => /(ด่าง|อัลค|alk)/i.test(h));
+    const salinityCol = headers.findIndex((h) => /(ความเค็ม|salinity)/i.test(h));
 
     table.querySelectorAll('tbody tr').forEach((tr) => {
       if (tr.classList.contains('farm-row-header')) return;
@@ -272,7 +291,13 @@ export function parseReportHtml(htmlString) {
         const digits = cells[idx].textContent.replace(/[^\d.]/g, '');
         return digits ? parseFloat(digits) : null;
       };
-      waterQualityByPond[pondMatch[0]] = { ammonia: parseCell(ammoniaCol), nitrite: parseCell(nitriteCol) };
+      waterQualityByPond[pondMatch[0]] = {
+        ammonia: parseCell(ammoniaCol),
+        nitrite: parseCell(nitriteCol),
+        ph: parseCell(phCol),
+        alkalinity: parseCell(alkalinityCol),
+        salinity: parseCell(salinityCol),
+      };
     });
   });
   ponds.forEach((p) => {
@@ -280,6 +305,9 @@ export function parseReportHtml(htmlString) {
     if (!wq) return;
     if (wq.ammonia != null) p.ammonia = wq.ammonia;
     if (wq.nitrite != null) p.nitrite = wq.nitrite;
+    if (wq.ph != null) p.ph = wq.ph;
+    if (wq.alkalinity != null) p.alkalinity = wq.alkalinity;
+    if (wq.salinity != null) p.salinity = wq.salinity;
   });
 
   // Good news: Template A (.issue-grid .issue) first, Template B (.alert-card.good-card) as

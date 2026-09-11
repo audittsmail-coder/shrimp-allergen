@@ -102,7 +102,7 @@ textarea{
 }
 
 .table-scroll{ overflow-x:auto; }
-.edit-table{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:640px; }
+.edit-table{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:880px; }
 .edit-table th{
   text-align:left; font-size:11px; color:var(--ink-faint); font-weight:700; padding:6px 8px;
   border-bottom:1px solid var(--line);
@@ -153,5 +153,5 @@ textarea{
 .bottom-space{ height:40px; }
 
 @media (max-width: 480px){
-  .edit-table{ min-width: 580px; }
+  .edit-table{ min-width: 820px; }
 }
