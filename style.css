@@ -108,7 +108,7 @@ textarea{
   border-bottom:1px solid var(--line);
 }
 .edit-table td{ padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
-.edit-table input[type=text], .edit-table input[type=date], .edit-table select{
+.edit-table input[type=text], .edit-table input[type=date], .edit-table input[type=number], .edit-table select{
   font-family:inherit; font-size:12.5px; padding:5px 7px; border:1px solid var(--line);
   border-radius:6px; width:100%; color:var(--ink); background:var(--surface-soft);
 }
