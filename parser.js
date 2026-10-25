@@ -164,7 +164,15 @@ export function parseReportHtml(htmlString) {
     doc.querySelectorAll('.farm-block').forEach((farmBlock) => {
       const farmLabel = farmBlock.querySelector('.farm-label')?.textContent?.replace(/\s+/g, ' ').trim() || '';
       farmBlock.querySelectorAll('.pond-card').forEach((card) => {
-        const pondNo = card.querySelector('.pond-num')?.textContent?.trim() || '';
+        // A pond's number sometimes carries a nickname after it (e.g. "304 ดำ") right in
+        // .pond-num, the same way the farm app's own pond names sometimes do (e.g.
+        // "101(น้ำเตี้ย)"). Only the leading digits identify the pond for matching/saving —
+        // keeping the nickname in pondNo would make this pond invisible (it wouldn't match
+        // any registered pond) — so it's split off here and folded into the status text instead.
+        const pondNumRaw = card.querySelector('.pond-num')?.textContent?.trim() || '';
+        const pondNumMatch = pondNumRaw.match(/^(\d+)\s*(.*)$/);
+        const pondNo = pondNumMatch ? pondNumMatch[1] : pondNumRaw;
+        const pondNickname = pondNumMatch ? pondNumMatch[2].trim() : '';
         if (!pondNo) return;
 
         const params = Array.from(card.querySelectorAll('.param-row'))
@@ -175,7 +183,8 @@ export function parseReportHtml(htmlString) {
           .filter((p) => p.lbl && p.val);
 
         const statusLabel = card.querySelector('.pond-status')?.textContent?.trim() || '';
-        const status = params.length ? params.map((p) => `${p.lbl} ${p.val}`).join(', ') : statusLabel;
+        const paramsStatus = params.length ? params.map((p) => `${p.lbl} ${p.val}`).join(', ') : statusLabel;
+        const status = pondNickname ? `[${pondNickname}] ${paramsStatus}` : paramsStatus;
 
         let ammonia = null;
         let nitrite = null;
