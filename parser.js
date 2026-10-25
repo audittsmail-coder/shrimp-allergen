@@ -164,15 +164,13 @@ export function parseReportHtml(htmlString) {
     doc.querySelectorAll('.farm-block').forEach((farmBlock) => {
       const farmLabel = farmBlock.querySelector('.farm-label')?.textContent?.replace(/\s+/g, ' ').trim() || '';
       farmBlock.querySelectorAll('.pond-card').forEach((card) => {
-        // A pond's number sometimes carries a nickname after it (e.g. "304 ดำ") right in
-        // .pond-num, the same way the farm app's own pond names sometimes do (e.g.
-        // "101(น้ำเตี้ย)"). Only the leading digits identify the pond for matching/saving —
-        // keeping the nickname in pondNo would make this pond invisible (it wouldn't match
-        // any registered pond) — so it's split off here and folded into the status text instead.
+        // A pond's number sometimes carries a trailing note after it (e.g. "304 ดำ" — a note
+        // that the pond's shrimp are the dark/black variety) right in .pond-num, the same way
+        // the farm app's own pond names sometimes carry a nickname suffix (e.g.
+        // "101(น้ำเตี้ย)"). Only the leading digits identify the pond for matching/saving, so
+        // whatever follows them is simply ignored.
         const pondNumRaw = card.querySelector('.pond-num')?.textContent?.trim() || '';
-        const pondNumMatch = pondNumRaw.match(/^(\d+)\s*(.*)$/);
-        const pondNo = pondNumMatch ? pondNumMatch[1] : pondNumRaw;
-        const pondNickname = pondNumMatch ? pondNumMatch[2].trim() : '';
+        const pondNo = (pondNumRaw.match(/^\d+/) || [''])[0];
         if (!pondNo) return;
 
         const params = Array.from(card.querySelectorAll('.param-row'))
@@ -183,8 +181,7 @@ export function parseReportHtml(htmlString) {
           .filter((p) => p.lbl && p.val);
 
         const statusLabel = card.querySelector('.pond-status')?.textContent?.trim() || '';
-        const paramsStatus = params.length ? params.map((p) => `${p.lbl} ${p.val}`).join(', ') : statusLabel;
-        const status = pondNickname ? `[${pondNickname}] ${paramsStatus}` : paramsStatus;
+        const status = params.length ? params.map((p) => `${p.lbl} ${p.val}`).join(', ') : statusLabel;
 
         let ammonia = null;
         let nitrite = null;
