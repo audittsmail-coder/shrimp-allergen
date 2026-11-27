@@ -38,11 +38,10 @@ async function autoConnect() {
   try {
     await connect(cfg);
     setFbStatus('เชื่อมต่อแล้ว ✅', 'status-txt ok');
-    await loadHome();
   } catch (err) {
     setFbStatus('เชื่อมต่อไม่สำเร็จ', 'status-txt err');
   }
-  route();
+  route(); // showHome()/showDetail() fetch their own data — no manual refresh needed
 }
 
 // ---------- Home: pond grid grouped by farm ----------
@@ -188,8 +187,7 @@ $('#clearPondBtn').addEventListener('click', async () => {
   if (!confirm(`ลบผลเชื้อทั้งหมดของบ่อ ${label} ทุกสัปดาห์? การกระทำนี้ย้อนกลับไม่ได้ (ข้อมูลไซส์/อาหาร/อัตรารอดจะไม่ถูกลบ)`)) return;
   try {
     await clearAllPathogenForPond(currentPondId);
-    await showDetail(currentPondId);
-    await loadHome(); // refresh grid severity badge after clearing
+    await showDetail(currentPondId); // showHome() refetches the grid on the way back, no need to do it here too
   } catch (err) {
     alert('ลบไม่สำเร็จ: ' + err.message);
   }
@@ -199,10 +197,10 @@ function showHome() {
   currentPondId = null;
   $('#view-detail').style.display = 'none';
   $('#view-home').style.display = 'block';
+  loadHome(); // always fetch fresh data, so returning to the grid shows current results
 }
 
 $('#backBtn').addEventListener('click', () => { location.hash = ''; });
-$('#refreshBtn').addEventListener('click', loadHome);
 
 function route() {
   const m = (location.hash || '').match(/^#pond=(.+)$/);
