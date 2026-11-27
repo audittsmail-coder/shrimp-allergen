@@ -1,45 +1,29 @@
-import { parseReportHtml } from './parser.js';
 import {
   getStoredConfig,
   connect,
   isConnected,
-  saveReport,
-  listReports,
   listPonds,
   listPondHistory,
   deletePondPathogenEntry,
   clearAllPathogenForPond,
-  clearAllPathogenData,
 } from './firebase.js';
 
-let registeredPondNames = null; // Set of leading pond numbers from the `ponds` collection, cached per session
+const $ = (sel) => document.querySelector(sel);
 
-// Pond names in the farm app may carry a nickname suffix (e.g. "101(น้ำเตี้ย)"); only the
-// leading number identifies the pond, so that's what this preview-filter compares against
-// (matches the prefix-based lookup firebase.js uses when it actually saves).
-async function getRegisteredPondNames() {
-  if (registeredPondNames) return registeredPondNames;
-  const ponds = await listPonds();
-  registeredPondNames = new Set(ponds.map((p) => (String(p.name).match(/^\d+/) || [String(p.name)])[0]));
-  return registeredPondNames;
+const SEV_LABEL = { critical: 'วิกฤต', watch: 'เฝ้าระวัง', normal: 'ปกติ' };
+const SEV_CLASS = { critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' };
+
+let pondsCache = null;
+let currentPondId = null;
+
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-
-let parsedData = null;
-
-// ---------- Tabs ----------
-$$('.tab-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    $$('.tab-btn').forEach((b) => b.classList.remove('active'));
-    $$('.tab-panel').forEach((p) => p.classList.remove('active'));
-    btn.classList.add('active');
-    $(`#tab-${btn.dataset.tab}`).classList.add('active');
-    if (btn.dataset.tab === 'history') loadHistory();
-    if (btn.dataset.tab === 'trend') populatePondSelect();
-  });
-});
+function farmLabel(farmId) {
+  const m = String(farmId || '').match(/\d+/);
+  return m ? `ฟาร์ม ${m[0]}` : (farmId || 'ไม่ระบุฟาร์ม');
+}
 
 // ---------- Firebase connection ----------
 function setFbStatus(text, cls) {
@@ -48,270 +32,22 @@ function setFbStatus(text, cls) {
   el.className = cls || '';
 }
 
-$('#clearAllPathogenBtn').addEventListener('click', async () => {
-  const statusEl = $('#clearAllStatus');
-  if (!isConnected()) {
-    statusEl.textContent = 'กรุณาตั้งค่า Firebase ก่อน';
-    statusEl.className = 'status-txt err';
-    return;
-  }
-  const typed = prompt('การกระทำนี้จะลบผลเชื้อของ "ทุกบ่อทุกฟาร์ม" และประวัติการนำเข้ารายงานทั้งหมด ย้อนกลับไม่ได้\n\nพิมพ์คำว่า DELETE เพื่อยืนยัน:');
-  if ((typed || '').trim().toUpperCase() !== 'DELETE') {
-    if (typed !== null) {
-      statusEl.textContent = 'ยกเลิก — พิมพ์ไม่ตรง';
-      statusEl.className = 'status-txt err';
-    }
-    return;
-  }
-  statusEl.textContent = 'กำลังล้างข้อมูล...';
-  statusEl.className = 'status-txt';
-  $('#clearAllPathogenBtn').disabled = true;
-  try {
-    const { recordsCleared, reportsDeleted } = await clearAllPathogenData();
-    statusEl.textContent = `ล้างข้อมูลสำเร็จ ✅ — ลบผลเชื้อ ${recordsCleared} รายการ, ลบประวัติรายงาน ${reportsDeleted} รายการ`;
-    statusEl.className = 'status-txt ok';
-    registeredPondNames = null; // stale cache after a full data reset
-  } catch (err) {
-    statusEl.textContent = 'ล้างข้อมูลไม่สำเร็จ: ' + err.message;
-    statusEl.className = 'status-txt err';
-  } finally {
-    $('#clearAllPathogenBtn').disabled = false;
-  }
-});
-
 async function autoConnect() {
   const cfg = getStoredConfig();
   setFbStatus('กำลังเชื่อมต่อ...', '');
   try {
     await connect(cfg);
     setFbStatus('เชื่อมต่อแล้ว ✅', 'status-txt ok');
+    await loadHome();
   } catch (err) {
     setFbStatus('เชื่อมต่อไม่สำเร็จ', 'status-txt err');
   }
-}
-autoConnect();
-
-// ---------- Import / Parse ----------
-$('#pasteBtn').addEventListener('click', () => {
-  const ta = $('#htmlInput');
-  ta.style.display = ta.style.display === 'none' ? 'block' : 'none';
-});
-
-$('#fileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const text = await file.text();
-  $('#htmlInput').value = text;
-  $('#htmlInput').style.display = 'block';
-  $('#parseStatus').textContent = `โหลดไฟล์ ${file.name} แล้ว`;
-  $('#parseStatus').className = 'status-txt';
-});
-
-$('#parseBtn').addEventListener('click', async () => {
-  const html = $('#htmlInput').value.trim();
-  const statusEl = $('#parseStatus');
-  if (!html) {
-    statusEl.textContent = 'กรุณาวางไฟล์หรือข้อความ HTML ก่อน';
-    statusEl.className = 'status-txt err';
-    return;
-  }
-  try {
-    parsedData = parseReportHtml(html);
-
-    // Only show ponds that already exist in the `ponds` collection (added via the
-    // farm-management app) — a report row with no matching pond has nowhere to save to.
-    let skippedCount = 0;
-    if (parsedData.ponds.length && isConnected()) {
-      try {
-        const names = await getRegisteredPondNames();
-        const before = parsedData.ponds.length;
-        parsedData.ponds = parsedData.ponds.filter((p) => names.has(String(p.pondNo)));
-        skippedCount = before - parsedData.ponds.length;
-      } catch {
-        // If the lookup fails, fall back to showing everything unfiltered.
-      }
-    }
-
-    if (!parsedData.ponds.length) {
-      statusEl.textContent = skippedCount
-        ? `แยกข้อมูลสำเร็จ แต่บ่อทั้งหมด ${skippedCount} บ่อยังไม่ได้เพิ่มในแอปจัดการบ่อ จึงไม่มีรายการให้บันทึก`
-        : 'แยกข้อมูลสำเร็จ แต่ไม่พบข้อมูลบ่อ — ตรวจสอบโครงสร้าง HTML หรือเพิ่มแถวเอง';
-      statusEl.className = 'status-txt err';
-    } else {
-      statusEl.textContent = `แยกข้อมูลสำเร็จ พบ ${parsedData.ponds.length} รายการบ่อ` +
-        (skippedCount ? ` (ข้าม ${skippedCount} บ่อที่ยังไม่ได้เพิ่มในแอปจัดการบ่อ)` : '');
-      statusEl.className = 'status-txt ok';
-    }
-    renderPreview(parsedData);
-  } catch (err) {
-    statusEl.textContent = 'แยกข้อมูลไม่สำเร็จ: ' + err.message;
-    statusEl.className = 'status-txt err';
-  }
-});
-
-function renderPreview(data) {
-  $('#previewArea').style.display = 'block';
-  $('#metaTitle').value = data.title || '';
-  $('#metaDistrict').value = data.district || '';
-  $('#metaRound').value = data.round || '';
-
-  const tbody = $('#pondTableBody');
-  tbody.innerHTML = '';
-  data.ponds.forEach((p) => addPondRow(p));
-
-  const extra = $('#extraSummary');
-  extra.innerHTML = '';
-  if (data.alerts.length) {
-    extra.appendChild(
-      buildBlock(
-        '🔴 บ่อที่ถูกแจ้งเตือน',
-        data.alerts.map((a) => `บ่อ ${a.pondNo || '-'}: ${a.title}${a.desc ? ' — ' + a.desc : ''}`)
-      )
-    );
-  }
-  if (data.goodNews.length) {
-    extra.appendChild(buildBlock('✅ ข่าวดี', data.goodNews.map((g) => `${g.title} — ${g.desc}`)));
-  }
-  if (data.recommendations.length) {
-    extra.appendChild(buildBlock('📋 คำแนะนำ', data.recommendations.map((r) => r.text)));
-  }
-  if (data.compareTables.length) {
-    extra.appendChild(
-      buildBlock(
-        '📊 ตารางเทียบผล (เก็บดิบไว้ในบันทึก)',
-        data.compareTables.map((t, i) => `ตาราง ${i + 1}: ${t.headers.join(' | ')} (${t.rows.length} แถว)`)
-      )
-    );
-  }
+  route();
 }
 
-function buildBlock(heading, lines) {
-  const div = document.createElement('div');
-  div.className = 'blk';
-  const h = document.createElement('div');
-  h.className = 'h';
-  h.textContent = heading;
-  div.appendChild(h);
-  lines.forEach((line) => {
-    const p = document.createElement('div');
-    p.textContent = '• ' + line;
-    div.appendChild(p);
-  });
-  return div;
-}
-
-function addPondRow(p = {}) {
-  const tbody = $('#pondTableBody');
-  const tr = document.createElement('tr');
-  tr.className = { critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[p.severity] || '';
-  tr.innerHTML = `
-    <td><input type="text" class="f-farm" value="${escapeAttr(p.farm || '')}" /></td>
-    <td><input type="text" class="f-pond" value="${escapeAttr(p.pondNo || '')}" /></td>
-    <td><input type="date" class="f-date" value="${escapeAttr(p.dateISO || '')}" /></td>
-    <td><input type="text" class="f-status" value="${escapeAttr(p.status || '')}" /></td>
-    <td>
-      <select class="f-sev">
-        <option value="normal" ${p.severity === 'normal' ? 'selected' : ''}>ปกติ</option>
-        <option value="watch" ${p.severity === 'watch' ? 'selected' : ''}>เฝ้าระวัง</option>
-        <option value="critical" ${p.severity === 'critical' ? 'selected' : ''}>วิกฤต</option>
-      </select>
-    </td>
-    <td><input type="number" step="0.01" class="f-ammonia" placeholder="mg/L" value="${p.ammonia ?? ''}" /></td>
-    <td><input type="number" step="0.01" class="f-nitrite" placeholder="mg/L" value="${p.nitrite ?? ''}" /></td>
-    <td><input type="number" step="0.01" class="f-ph" placeholder="pH" value="${p.ph ?? ''}" /></td>
-    <td><input type="number" step="1" class="f-alkalinity" placeholder="mg/L" value="${p.alkalinity ?? ''}" /></td>
-    <td><input type="number" step="0.1" class="f-salinity" placeholder="ppt" value="${p.salinity ?? ''}" /></td>
-    <td style="text-align:center;"><input type="checkbox" class="f-worse" ${p.worsened ? 'checked' : ''} /></td>
-    <td><button type="button" class="row-del">✕</button></td>
-  `;
-  tr.querySelector('.f-sev').addEventListener('change', (e) => {
-    tr.className = { critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[e.target.value] || '';
-  });
-  tr.querySelector('.row-del').addEventListener('click', () => tr.remove());
-  tbody.appendChild(tr);
-}
-
-function escapeAttr(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
-
-$('#addRowBtn').addEventListener('click', () => addPondRow());
-
-function readPondsFromTable() {
-  return $$('#pondTableBody tr').map((tr) => {
-    const dateISO = tr.querySelector('.f-date').value || null;
-    const ammonia = tr.querySelector('.f-ammonia').value;
-    const nitrite = tr.querySelector('.f-nitrite').value;
-    const ph = tr.querySelector('.f-ph').value;
-    const alkalinity = tr.querySelector('.f-alkalinity').value;
-    const salinity = tr.querySelector('.f-salinity').value;
-    return {
-      farm: tr.querySelector('.f-farm').value.trim(),
-      pondNo: tr.querySelector('.f-pond').value.trim(),
-      status: tr.querySelector('.f-status').value.trim(),
-      severity: tr.querySelector('.f-sev').value,
-      ammonia: ammonia !== '' ? parseFloat(ammonia) : null,
-      nitrite: nitrite !== '' ? parseFloat(nitrite) : null,
-      ph: ph !== '' ? parseFloat(ph) : null,
-      alkalinity: alkalinity !== '' ? parseFloat(alkalinity) : null,
-      salinity: salinity !== '' ? parseFloat(salinity) : null,
-      worsened: tr.querySelector('.f-worse').checked,
-      dateISO,
-      dateRaw: dateISO || '',
-    };
-  }).filter((p) => p.pondNo);
-}
-
-$('#saveBtn').addEventListener('click', async () => {
-  const statusEl = $('#saveStatus');
-  if (!isConnected()) {
-    statusEl.textContent = 'กรุณาเชื่อมต่อ Firebase ก่อน';
-    statusEl.className = 'status-txt err';
-    return;
-  }
-  const ponds = readPondsFromTable();
-  if (!ponds.length) {
-    statusEl.textContent = 'ไม่มีข้อมูลบ่อให้บันทึก';
-    statusEl.className = 'status-txt err';
-    return;
-  }
-  const payload = {
-    title: $('#metaTitle').value.trim(),
-    district: $('#metaDistrict').value.trim(),
-    round: $('#metaRound').value.trim(),
-    pondCount: parsedData?.pondCount || '',
-    ponds,
-    alerts: parsedData?.alerts || [],
-    goodNews: parsedData?.goodNews || [],
-    recommendations: parsedData?.recommendations || [],
-    compareTables: parsedData?.compareTables || [],
-  };
-  statusEl.textContent = 'กำลังบันทึก...';
-  statusEl.className = 'status-txt';
-  $('#saveBtn').disabled = true;
-  try {
-    const { reportId, unmatchedPonds } = await saveReport(payload);
-    if (unmatchedPonds.length) {
-      statusEl.textContent = `บันทึกสำเร็จบางส่วน ⚠️ (รหัส ${reportId}) — ไม่พบบ่อนี้ใน ponds จึงยังไม่ได้เชื่อมผลเชื้อ: ${unmatchedPonds.join(', ')} (ต้องเพิ่มบ่อนี้ในแอปจัดการบ่อก่อน แล้วนำเข้ารายงานนี้ซ้ำ)`;
-      statusEl.className = 'status-txt err';
-    } else {
-      statusEl.textContent = `บันทึกสำเร็จ ✅ (รหัส ${reportId}) — เชื่อมผลเชื้อเข้ากับทุกบ่อแล้ว`;
-      statusEl.className = 'status-txt ok';
-    }
-  } catch (err) {
-    statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + err.message;
-    statusEl.className = 'status-txt err';
-  } finally {
-    $('#saveBtn').disabled = false;
-  }
-});
-
-// ---------- History ----------
-$('#refreshHistoryBtn').addEventListener('click', loadHistory);
-
-async function loadHistory() {
-  const statusEl = $('#historyStatus');
-  const listEl = $('#historyList');
+// ---------- Home: pond grid grouped by farm ----------
+async function loadHome() {
+  const statusEl = $('#homeStatus');
   if (!isConnected()) {
     statusEl.textContent = 'กรุณาตั้งค่า Firebase ก่อน';
     statusEl.className = 'status-txt err';
@@ -320,146 +56,162 @@ async function loadHistory() {
   statusEl.textContent = 'กำลังโหลด...';
   statusEl.className = 'status-txt';
   try {
-    const reports = await listReports();
-    statusEl.textContent = `พบ ${reports.length} รายงาน`;
+    const ponds = await listPonds();
+    pondsCache = ponds;
+    statusEl.textContent = `พบ ${ponds.length} บ่อ`;
     statusEl.className = 'status-txt ok';
-    listEl.innerHTML = '';
-    reports.forEach((r) => listEl.appendChild(buildHistoryCard(r)));
+    renderFarmGroups(ponds);
   } catch (err) {
     statusEl.textContent = 'โหลดไม่สำเร็จ: ' + err.message;
     statusEl.className = 'status-txt err';
   }
 }
 
-function buildHistoryCard(report) {
-  const div = document.createElement('div');
-  div.className = 'history-card';
-  const dateStr = report.createdAt?.toDate ? report.createdAt.toDate().toLocaleString('th-TH') : '';
-  div.innerHTML = `
-    <div class="h">${escapeAttr(report.title || 'รายงาน')}</div>
-    <div class="sub">${escapeAttr(report.district || '')} ${report.round ? '· รอบ ' + escapeAttr(report.round) : ''} ${dateStr ? '· บันทึกเมื่อ ' + dateStr : ''}</div>
-    <div class="ponds"></div>
-  `;
-  const pondsEl = div.querySelector('.ponds');
-  (report.ponds || []).forEach((p) => {
-    const chip = document.createElement('span');
-    chip.className = 'chip ' + ({ critical: 'red', watch: 'amber', normal: 'green' }[p.severity] || 'amber');
-    chip.textContent = `บ่อ ${p.pondNo}${p.dateRaw ? ' (' + p.dateRaw + ')' : ''}`;
-    chip.title = p.status;
-    pondsEl.appendChild(chip);
+function renderFarmGroups(ponds) {
+  const container = $('#farmGroups');
+  container.innerHTML = '';
+  const groups = new Map();
+  ponds.forEach((p) => {
+    const key = p.farmId || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
   });
-  return div;
+  const sortedKeys = Array.from(groups.keys()).sort((a, b) => farmLabel(a).localeCompare(farmLabel(b), 'th'));
+  sortedKeys.forEach((key) => {
+    const list = groups.get(key);
+    const block = document.createElement('div');
+    block.className = 'farm-block';
+    const head = document.createElement('div');
+    head.className = 'farm-head';
+    head.textContent = `${farmLabel(key)} · ${list.length} บ่อ`;
+    block.appendChild(head);
+    const grid = document.createElement('div');
+    grid.className = 'pond-grid';
+    list.forEach((p) => grid.appendChild(buildPondTile(p)));
+    block.appendChild(grid);
+    container.appendChild(block);
+  });
 }
 
-// ---------- Trend ----------
-async function populatePondSelect() {
-  const sel = $('#pondSelect');
-  const statusEl = $('#trendStatus');
+function buildPondTile(p) {
+  const tile = document.createElement('button');
+  tile.type = 'button';
+  tile.className = 'pond-tile ' + (SEV_CLASS[p.pathogenSeverity] || 'sev-none');
+  tile.innerHTML = `
+    <div class="pond-tile-no">${escapeAttr(p.name || p.id)}</div>
+    <div class="pond-tile-sev">${p.pathogenSeverity ? (SEV_LABEL[p.pathogenSeverity] || p.pathogenSeverity) : 'ไม่มีข้อมูล'}</div>
+  `;
+  tile.addEventListener('click', () => { location.hash = '#pond=' + encodeURIComponent(p.id); });
+  return tile;
+}
+
+// ---------- Detail: full history for one pond ----------
+async function showDetail(pondId) {
+  currentPondId = pondId;
+  $('#view-home').style.display = 'none';
+  $('#view-detail').style.display = 'block';
+
+  if (!pondsCache) {
+    try { pondsCache = await listPonds(); } catch { /* fall through with id-only header */ }
+  }
+
+  const pond = (pondsCache || []).find((p) => p.id === pondId);
+  $('#detailHeader').innerHTML = `
+    <div class="detail-title">บ่อ ${escapeAttr(pond?.name || pondId)}</div>
+    <div class="detail-sub">${escapeAttr(farmLabel(pond?.farmId))}${pond?.species ? ' · ' + escapeAttr(pond.species) : ''}</div>
+  `;
+
+  const statusEl = $('#detailStatus');
+  $('#detailHistory').innerHTML = '';
   if (!isConnected()) {
     statusEl.textContent = 'กรุณาตั้งค่า Firebase ก่อน';
     statusEl.className = 'status-txt err';
     return;
   }
-  if (sel.dataset.loaded) return;
-  statusEl.textContent = 'กำลังโหลดรายชื่อบ่อ...';
-  try {
-    const ponds = await listPonds();
-    ponds.forEach((p) => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = 'บ่อ ' + (p.name || p.id);
-      sel.appendChild(opt);
-    });
-    sel.dataset.loaded = '1';
-    statusEl.textContent = `พบ ${ponds.length} บ่อ (จาก ponds)`;
-    statusEl.className = 'status-txt ok';
-  } catch (err) {
-    statusEl.textContent = 'โหลดไม่สำเร็จ: ' + err.message;
-    statusEl.className = 'status-txt err';
-  }
-}
-
-async function loadTrend(pondId) {
-  const resultEl = $('#trendResult');
-  const statusEl = $('#trendStatus');
-  const clearBtn = $('#clearPondPathogenBtn');
-  resultEl.innerHTML = '';
-  if (!pondId) {
-    clearBtn.style.display = 'none';
-    return;
-  }
-  statusEl.textContent = 'กำลังโหลดเทรนด์...';
-  try {
-    const entries = await listPondHistory(pondId);
-    statusEl.textContent = `พบ ${entries.length} รายการ`;
-    statusEl.className = 'status-txt ok';
-    clearBtn.style.display = entries.length ? 'inline-block' : 'none';
-
-    const table = document.createElement('table');
-    table.className = 'edit-table';
-    table.innerHTML = `
-      <thead><tr><th>สัปดาห์</th><th>ผลเชื้อ</th><th>ระดับ</th><th>แอมโมเนีย</th><th>ไนไตรท์</th><th>pH</th><th>ด่าง</th><th>ความเค็ม</th><th>แย่ลง?</th><th></th></tr></thead>
-      <tbody>
-        ${entries
-          .map(
-            (e, i) => `
-          <tr class="${{ critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green' }[e.severity] || ''}" data-index="${i}">
-            <td>${escapeAttr(e.weekDate || '-')}</td>
-            <td>${escapeAttr(e.status || '-')}</td>
-            <td>${escapeAttr(e.severity || '-')}</td>
-            <td>${e.ammonia != null ? escapeAttr(e.ammonia) + ' mg/L' : '-'}</td>
-            <td>${e.nitrite != null ? escapeAttr(e.nitrite) + ' mg/L' : '-'}</td>
-            <td>${e.ph != null ? escapeAttr(e.ph) : '-'}</td>
-            <td>${e.alkalinity != null ? escapeAttr(e.alkalinity) + ' mg/L' : '-'}</td>
-            <td>${e.salinity != null ? escapeAttr(e.salinity) + ' ppt' : '-'}</td>
-            <td style="text-align:center;">${e.worsened ? '▲' : ''}</td>
-            <td><button type="button" class="row-del trend-del-btn">ลบ</button></td>
-          </tr>`
-          )
-          .join('')}
-      </tbody>
-    `;
-    resultEl.appendChild(table);
-
-    table.querySelectorAll('.trend-del-btn').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const tr = btn.closest('tr');
-        const index = parseInt(tr.dataset.index, 10);
-        const entry = entries[index];
-        if (!entry) return;
-        if (!confirm(`ลบผลเชื้อของสัปดาห์ ${entry.weekDate} ออก?`)) return;
-        try {
-          await deletePondPathogenEntry(pondId, index);
-          await loadTrend(pondId);
-        } catch (err) {
-          statusEl.textContent = 'ลบไม่สำเร็จ: ' + err.message;
-          statusEl.className = 'status-txt err';
-        }
-      });
-    });
-  } catch (err) {
-    statusEl.textContent = 'โหลดไม่สำเร็จ: ' + err.message;
-    statusEl.className = 'status-txt err';
-  }
-}
-
-$('#pondSelect').addEventListener('change', (e) => loadTrend(e.target.value));
-
-$('#clearPondPathogenBtn').addEventListener('click', async () => {
-  const pondId = $('#pondSelect').value;
-  const statusEl = $('#trendStatus');
-  if (!pondId) return;
-  const pondLabel = $('#pondSelect').selectedOptions[0]?.textContent || pondId;
-  if (!confirm(`ลบผลเชื้อทั้งหมดของ${pondLabel} ออกทุกสัปดาห์? การกระทำนี้ย้อนกลับไม่ได้ (ข้อมูลไซส์/อาหาร/อัตรารอดจะไม่ถูกลบ)`)) return;
-  statusEl.textContent = 'กำลังลบ...';
+  statusEl.textContent = 'กำลังโหลด...';
   statusEl.className = 'status-txt';
   try {
-    const count = await clearAllPathogenForPond(pondId);
-    statusEl.textContent = `ลบผลเชื้อ ${count} รายการแล้ว ✅`;
+    const entries = await listPondHistory(pondId);
+    statusEl.textContent = entries.length ? `พบ ${entries.length} สัปดาห์` : 'ยังไม่มีข้อมูลผลเชื้อ';
     statusEl.className = 'status-txt ok';
-    await loadTrend(pondId);
+    renderHistory(entries, pondId);
   } catch (err) {
-    statusEl.textContent = 'ลบไม่สำเร็จ: ' + err.message;
+    statusEl.textContent = 'โหลดไม่สำเร็จ: ' + err.message;
     statusEl.className = 'status-txt err';
   }
+}
+
+function wqChip(label, value, unit) {
+  if (value == null) return '';
+  return `<span class="wq-chip">${label} ${escapeAttr(value)}${unit ? ' ' + unit : ''}</span>`;
+}
+
+function renderHistory(entries, pondId) {
+  const listEl = $('#detailHistory');
+  listEl.innerHTML = '';
+  // listPondHistory returns oldest-first; show newest-first for a detail/review view,
+  // but keep each entry's original array index (needed by deletePondPathogenEntry).
+  const ordered = entries.map((e, i) => ({ e, i })).reverse();
+  ordered.forEach(({ e, i }) => {
+    const card = document.createElement('div');
+    card.className = 'history-card ' + (SEV_CLASS[e.severity] || '');
+    const wq = [
+      wqChip('แอมโมเนีย', e.ammonia, 'mg/L'),
+      wqChip('ไนไตรท์', e.nitrite, 'mg/L'),
+      wqChip('pH', e.ph, ''),
+      wqChip('ด่าง', e.alkalinity, 'mg/L'),
+      wqChip('ความเค็ม', e.salinity, 'ppt'),
+    ].join('');
+    card.innerHTML = `
+      <div class="h">${escapeAttr(e.weekDate || '-')}${e.worsened ? ' · ▲ แย่ลง' : ''}</div>
+      <div class="sub">${escapeAttr(e.status || '-')}</div>
+      ${wq ? `<div class="wq-row">${wq}</div>` : ''}
+      <button type="button" class="row-del hist-del-btn">ลบรายการนี้</button>
+    `;
+    card.querySelector('.hist-del-btn').addEventListener('click', async () => {
+      if (!confirm(`ลบผลเชื้อของสัปดาห์ ${e.weekDate} ออก?`)) return;
+      try {
+        await deletePondPathogenEntry(pondId, i);
+        await showDetail(pondId);
+      } catch (err) {
+        alert('ลบไม่สำเร็จ: ' + err.message);
+      }
+    });
+    listEl.appendChild(card);
+  });
+}
+
+$('#clearPondBtn').addEventListener('click', async () => {
+  if (!currentPondId) return;
+  const pond = (pondsCache || []).find((p) => p.id === currentPondId);
+  const label = pond?.name || currentPondId;
+  if (!confirm(`ลบผลเชื้อทั้งหมดของบ่อ ${label} ทุกสัปดาห์? การกระทำนี้ย้อนกลับไม่ได้ (ข้อมูลไซส์/อาหาร/อัตรารอดจะไม่ถูกลบ)`)) return;
+  try {
+    await clearAllPathogenForPond(currentPondId);
+    await showDetail(currentPondId);
+    await loadHome(); // refresh grid severity badge after clearing
+  } catch (err) {
+    alert('ลบไม่สำเร็จ: ' + err.message);
+  }
 });
+
+function showHome() {
+  currentPondId = null;
+  $('#view-detail').style.display = 'none';
+  $('#view-home').style.display = 'block';
+}
+
+$('#backBtn').addEventListener('click', () => { location.hash = ''; });
+$('#refreshBtn').addEventListener('click', loadHome);
+
+function route() {
+  const m = (location.hash || '').match(/^#pond=(.+)$/);
+  if (m) {
+    showDetail(decodeURIComponent(m[1]));
+  } else {
+    showHome();
+  }
+}
+window.addEventListener('hashchange', route);
+
+autoConnect();

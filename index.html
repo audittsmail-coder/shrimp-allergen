@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>บันทึกผลเชื้อรายสัปดาห์ — อนันต์ฟาร์ม</title>
+<title>ผลตรวจเชื้อรายบ่อ — อนันต์ฟาร์ม</title>
 <meta name="theme-color" content="#0f5c5c">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="./icons/icon-32.png">
@@ -12,110 +12,43 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="บันทึกผลเชื้อ">
+<meta name="apple-mobile-web-app-title" content="ผลเชื้อรายบ่อ">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
 
   <header class="hero">
-    <div class="eyebrow">ระบบบันทึกผลตรวจเชื้อ</div>
-    <h1>บันทึกผลเชื้อรายสัปดาห์</h1>
+    <div class="eyebrow">ระบบติดตามผลตรวจเชื้อ</div>
+    <h1>ผลตรวจเชื้อรายบ่อ</h1>
     <div class="meta" id="connStatus">
       <div>สถานะ Firebase: <b id="fbStatusText">ยังไม่ได้ตั้งค่า</b></div>
     </div>
   </header>
 
-  <nav class="tabs">
-    <button class="tab-btn active" data-tab="import">📥 นำเข้ารายงาน</button>
-    <button class="tab-btn" data-tab="history">🗂️ ประวัติรายสัปดาห์</button>
-    <button class="tab-btn" data-tab="trend">📈 เทรนด์รายบ่อ</button>
-  </nav>
-
-  <!-- IMPORT TAB -->
-  <section id="tab-import" class="tab-panel active">
+  <!-- HOME: pond grid grouped by farm -->
+  <main id="view-home" class="view">
     <div class="section">
-      <div class="section-label">วางไฟล์ HTML รายงาน<div class="dash"></div></div>
-      <div class="drop-row">
-        <input type="file" id="fileInput" accept=".html,.htm" />
-        <span class="or">หรือ</span>
-        <button id="pasteBtn" class="btn-secondary">วางข้อความ HTML</button>
+      <div class="action-row" style="margin-top:0;">
+        <button id="refreshBtn" class="btn-secondary">🔄 โหลดใหม่</button>
+        <span id="homeStatus" class="status-txt"></span>
       </div>
-      <textarea id="htmlInput" placeholder="วางเนื้อหา HTML ของรายงานที่นี่ แล้วกด &quot;แยกข้อมูล&quot;" style="display:none;"></textarea>
-      <div class="action-row">
-        <button id="parseBtn" class="btn-primary">🔍 แยกข้อมูล</button>
-        <span id="parseStatus" class="status-txt"></span>
-      </div>
+      <div id="farmGroups"></div>
     </div>
+  </main>
 
-    <div id="previewArea" class="section" style="display:none;">
-      <div class="section-label">ตรวจสอบข้อมูลก่อนบันทึก<div class="dash"></div></div>
-      <div class="meta-edit">
-        <label>หัวข้อรายงาน <input type="text" id="metaTitle" /></label>
-        <label>เขต <input type="text" id="metaDistrict" /></label>
-        <label>รอบ/ช่วงเวลา <input type="text" id="metaRound" /></label>
-      </div>
-
-      <div class="section-label small">สถานะรายบ่อ (แก้ไขได้)<div class="dash"></div></div>
-      <div class="table-scroll">
-        <table id="pondTable" class="edit-table">
-          <thead>
-            <tr>
-              <th>ฟาร์ม</th>
-              <th>บ่อ</th>
-              <th>วันที่</th>
-              <th>สถานะ / ผลเชื้อ</th>
-              <th>ระดับ</th>
-              <th>แอมโมเนีย</th>
-              <th>ไนไตรท์</th>
-              <th>pH</th>
-              <th>ด่าง</th>
-              <th>ความเค็ม</th>
-              <th>แย่ลง?</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="pondTableBody"></tbody>
-        </table>
-      </div>
-      <button id="addRowBtn" class="btn-secondary small">+ เพิ่มแถว</button>
-
-      <div class="section-label small">รายละเอียดเพิ่มเติมที่ตรวจพบ<div class="dash"></div></div>
-      <div id="extraSummary" class="extra-summary"></div>
-
-      <div class="action-row">
-        <button id="saveBtn" class="btn-primary">💾 บันทึกลง Firebase</button>
-        <span id="saveStatus" class="status-txt"></span>
-      </div>
-    </div>
-  </section>
-
-  <!-- HISTORY TAB -->
-  <section id="tab-history" class="tab-panel">
+  <!-- DETAIL: full pathogen history for one pond -->
+  <main id="view-detail" class="view" style="display:none;">
     <div class="section">
-      <div class="section-label">รายงานที่บันทึกไว้<div class="dash"></div></div>
+      <button id="backBtn" class="btn-secondary small" style="margin-top:0;">← กลับ</button>
+      <div id="detailHeader"></div>
+      <div id="detailStatus" class="status-txt"></div>
+      <div id="detailHistory" class="history-list"></div>
       <div class="action-row">
-        <button id="refreshHistoryBtn" class="btn-secondary">🔄 โหลดใหม่</button>
-        <button id="clearAllPathogenBtn" class="btn-secondary small" style="margin-top:0; color:var(--coral); border-color:var(--coral);">🗑️ ล้างข้อมูลผลเชื้อทั้งหมด</button>
-        <span id="historyStatus" class="status-txt"></span>
+        <button id="clearPondBtn" class="btn-secondary small" style="color:var(--coral); border-color:var(--coral);">🗑️ ลบผลเชื้อทั้งหมดของบ่อนี้</button>
       </div>
-      <div id="clearAllStatus" class="status-txt"></div>
-      <div id="historyList" class="history-list"></div>
     </div>
-  </section>
-
-  <!-- TREND TAB -->
-  <section id="tab-trend" class="tab-panel">
-    <div class="section">
-      <div class="section-label">เลือกบ่อเพื่อดูเทรนด์<div class="dash"></div></div>
-      <div class="action-row">
-        <select id="pondSelect"><option value="">-- เลือกบ่อ --</option></select>
-        <button id="clearPondPathogenBtn" class="btn-secondary small" style="display:none; margin-top:0;">🗑️ ลบผลเชื้อทั้งหมดของบ่อนี้</button>
-        <span id="trendStatus" class="status-txt"></span>
-      </div>
-      <div id="trendResult" class="table-scroll"></div>
-    </div>
-  </section>
+  </main>
 
   <div class="bottom-space"></div>
 </div>
