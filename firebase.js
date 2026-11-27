@@ -63,12 +63,18 @@ export function isConnected() {
 // Results are written directly to Firestore outside this app (this app is a read-only
 // viewer plus per-entry cleanup) — see README for how a weekly report gets in.
 
+// When a pond's current crop is harvested, the farm-management app sets `closedAt` on that
+// pond doc and a brand-new doc (same pond number, new releaseDate) is created for the next
+// cycle — the closed doc is kept around for that app's own records, not deleted. Filtered out
+// here so a harvested cycle's old doc doesn't show up as a stale duplicate tile alongside the
+// pond's current one.
 export async function listPonds() {
   const s = await loadSdk();
   if (!dbInstance) throw new Error('ยังไม่ได้เชื่อมต่อ Firebase');
   const snap = await s.getDocs(s.collection(dbInstance, 'ponds'));
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((p) => !p.closedAt)
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 

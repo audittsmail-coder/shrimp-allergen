@@ -130,10 +130,19 @@ async function showDetail(pondId) {
   statusEl.textContent = 'กำลังโหลด...';
   statusEl.className = 'status-txt';
   try {
-    const entries = await listPondHistory(pondId);
-    statusEl.textContent = entries.length ? `พบ ${entries.length} สัปดาห์` : 'ยังไม่มีข้อมูลผลเชื้อ';
+    const entries = await listPondHistory(pondId); // oldest-first, full pathogenHistory
+    // Only show results from the pond's current stocking cycle — a prior cycle's results
+    // belong to that cycle's own (now-closed) pond doc in principle, but this guards against
+    // the same doc ever carrying leftover entries from before its current releaseDate too.
+    // Each entry keeps its original array index (i), since deletePondPathogenEntry indexes
+    // into the full sorted pathogenHistory array, not this filtered view.
+    const cutoff = pond?.releaseDate || null;
+    const visible = entries
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => !cutoff || !e.weekDate || e.weekDate >= cutoff);
+    statusEl.textContent = visible.length ? `พบ ${visible.length} สัปดาห์ (รอบปัจจุบัน)` : 'ยังไม่มีข้อมูลผลเชื้อในรอบนี้';
     statusEl.className = 'status-txt ok';
-    renderHistory(entries, pondId);
+    renderHistory(visible, pondId);
   } catch (err) {
     statusEl.textContent = 'โหลดไม่สำเร็จ: ' + err.message;
     statusEl.className = 'status-txt err';
@@ -145,12 +154,12 @@ function wqChip(label, value, unit) {
   return `<span class="wq-chip">${label} ${escapeAttr(value)}${unit ? ' ' + unit : ''}</span>`;
 }
 
-function renderHistory(entries, pondId) {
+function renderHistory(visible, pondId) {
   const listEl = $('#detailHistory');
   listEl.innerHTML = '';
-  // listPondHistory returns oldest-first; show newest-first for a detail/review view,
-  // but keep each entry's original array index (needed by deletePondPathogenEntry).
-  const ordered = entries.map((e, i) => ({ e, i })).reverse();
+  // `visible` is oldest-first (filtered to the current cycle); show newest-first for a
+  // detail/review view. Each item keeps its original pathogenHistory index (i).
+  const ordered = visible.slice().reverse();
   ordered.forEach(({ e, i }) => {
     const card = document.createElement('div');
     card.className = 'history-card ' + (SEV_CLASS[e.severity] || '');
