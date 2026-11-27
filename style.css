@@ -88,22 +88,22 @@ body{
 
 .history-list{ display:flex; flex-direction:column; gap:12px; margin-top:12px; }
 .history-card{
-  background:var(--surface-soft); border:1px solid var(--line); border-radius:12px; padding:14px 16px;
+  background:var(--surface-soft); border:1px solid var(--line); border-radius:14px; padding:18px 18px;
 }
 .history-card.sev-red{ background:rgba(225,90,77,0.14); }
 .history-card.sev-amber{ background:rgba(232,162,59,0.14); }
 .history-card.sev-green{ background:rgba(47,158,110,0.12); }
-.history-card .h{ font-weight:700; font-size:17px; color:var(--ink); margin-bottom:6px; }
-.history-card .sub{ font-size:15px; color:var(--ink-soft); margin-bottom:10px; line-height:1.5; }
+.history-card .h{ font-weight:700; font-size:22px; color:var(--ink); margin-bottom:8px; }
+.history-card .sub{ font-size:18px; color:var(--ink-soft); margin-bottom:12px; line-height:1.5; }
 
-.wq-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+.wq-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
 .wq-chip{
-  font-size:14px; color:var(--ink-soft); background:var(--surface);
-  border:1px solid var(--line); border-radius:8px; padding:5px 10px;
+  font-size:17px; color:var(--ink-soft); background:var(--surface);
+  border:1px solid var(--line); border-radius:9px; padding:6px 12px;
 }
 
 .row-del{
-  background:none; border:none; color:var(--coral); cursor:pointer; font-size:14.5px;
+  background:none; border:none; color:var(--coral); cursor:pointer; font-size:17px;
   font-family:inherit; font-weight:700; padding:0;
 }
 
