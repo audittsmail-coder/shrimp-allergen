@@ -68,10 +68,10 @@ body{
   font-size:12.5px; font-weight:700; color: var(--aqua-light); margin-bottom:10px;
 }
 .pond-grid{
-  display:grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap:10px;
+  display:flex; flex-wrap:wrap; justify-content:center; gap:10px;
 }
 .pond-tile{
-  aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  width:92px; aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:4px; border-radius:14px; border:1px solid var(--line); background:var(--surface-soft);
   color:var(--ink); font-family:inherit; cursor:pointer; padding:8px; text-align:center;
 }
