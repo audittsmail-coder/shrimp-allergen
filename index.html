@@ -13,7 +13,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ผลเชื้อรายบ่อ">
-<link rel="stylesheet" href="style.css">
+<!-- ?v= is bumped on every deploy to force iOS "Add to Home Screen" (and any browser)
+     to fetch the new file instead of serving a stale cached copy -->
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <div class="wrap">
@@ -50,6 +52,6 @@
   <div class="bottom-space"></div>
 </div>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=2"></script>
 </body>
 </html>

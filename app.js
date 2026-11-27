@@ -6,7 +6,7 @@ import {
   listPondHistory,
   deletePondPathogenEntry,
   clearAllPathogenForPond,
-} from './firebase.js';
+} from './firebase.js?v=2'; // bump alongside index.html's ?v= on every deploy (cache-busting)
 
 const $ = (sel) => document.querySelector(sel);
 
