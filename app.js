@@ -6,7 +6,7 @@ import {
   listPondHistory,
   deletePondPathogenEntry,
   clearAllPathogenForPond,
-} from './firebase.js?v=2'; // bump alongside index.html's ?v= on every deploy (cache-busting)
+} from './firebase.js?v=3'; // bump alongside index.html's ?v= on every deploy (cache-busting)
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -149,34 +149,56 @@ async function showDetail(pondId) {
   }
 }
 
-function wqChip(label, value, unit) {
+function cell(value, unit) {
+  // Spreadsheet-style: a reading this week didn't record simply stays a blank cell,
+  // not a "-" placeholder.
   if (value == null) return '';
-  return `<span class="wq-chip">${label} ${escapeAttr(value)}${unit ? ' ' + unit : ''}</span>`;
+  return escapeAttr(value) + (unit ? ' ' + unit : '');
 }
 
 function renderHistory(visible, pondId) {
-  const listEl = $('#detailHistory');
-  listEl.innerHTML = '';
+  const wrap = $('#detailHistory');
+  wrap.innerHTML = '';
+  if (!visible.length) return;
+
+  const table = document.createElement('table');
+  table.className = 'history-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>วันที่</th>
+        <th>สถานะ / ผลเชื้อ</th>
+        <th>แอมโมเนีย</th>
+        <th>ไนไตรท์</th>
+        <th>pH</th>
+        <th>ด่าง</th>
+        <th>ความเค็ม</th>
+        <th>แย่ลง?</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector('tbody');
+
   // `visible` is oldest-first (filtered to the current cycle); show newest-first for a
   // detail/review view. Each item keeps its original pathogenHistory index (i).
   const ordered = visible.slice().reverse();
   ordered.forEach(({ e, i }) => {
-    const card = document.createElement('div');
-    card.className = 'history-card ' + (SEV_CLASS[e.severity] || '');
-    const wq = [
-      wqChip('แอมโมเนีย', e.ammonia, 'mg/L'),
-      wqChip('ไนไตรท์', e.nitrite, 'mg/L'),
-      wqChip('pH', e.ph, ''),
-      wqChip('ด่าง', e.alkalinity, 'mg/L'),
-      wqChip('ความเค็ม', e.salinity, 'ppt'),
-    ].join('');
-    card.innerHTML = `
-      <div class="h">${escapeAttr(e.weekDate || '-')}${e.worsened ? ' · ▲ แย่ลง' : ''}</div>
-      <div class="sub">${escapeAttr(e.status || '-')}</div>
-      ${wq ? `<div class="wq-row">${wq}</div>` : ''}
-      <button type="button" class="row-del hist-del-btn">ลบรายการนี้</button>
+    const tr = document.createElement('tr');
+    tr.className = SEV_CLASS[e.severity] || '';
+    tr.innerHTML = `
+      <td>${escapeAttr(e.weekDate || '')}</td>
+      <td class="status-cell">${escapeAttr(e.status || '')}</td>
+      <td>${cell(e.ammonia, 'mg/L')}</td>
+      <td>${cell(e.nitrite, 'mg/L')}</td>
+      <td>${cell(e.ph)}</td>
+      <td>${cell(e.alkalinity, 'mg/L')}</td>
+      <td>${cell(e.salinity, 'ppt')}</td>
+      <td style="text-align:center;">${e.worsened ? '▲' : ''}</td>
+      <td><button type="button" class="row-del hist-del-btn">ลบ</button></td>
     `;
-    card.querySelector('.hist-del-btn').addEventListener('click', async () => {
+    tr.querySelector('.hist-del-btn').addEventListener('click', async () => {
       if (!confirm(`ลบผลเชื้อของสัปดาห์ ${e.weekDate} ออก?`)) return;
       try {
         await deletePondPathogenEntry(pondId, i);
@@ -185,8 +207,13 @@ function renderHistory(visible, pondId) {
         alert('ลบไม่สำเร็จ: ' + err.message);
       }
     });
-    listEl.appendChild(card);
+    tbody.appendChild(tr);
   });
+
+  const scroller = document.createElement('div');
+  scroller.className = 'table-scroll';
+  scroller.appendChild(table);
+  wrap.appendChild(scroller);
 }
 
 $('#clearPondBtn').addEventListener('click', async () => {
