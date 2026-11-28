@@ -15,7 +15,8 @@
 <meta name="apple-mobile-web-app-title" content="ผลเชื้อรายบ่อ">
 <!-- ?v= is bumped on every deploy to force iOS "Add to Home Screen" (and any browser)
      to fetch the new file instead of serving a stale cached copy -->
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -42,7 +43,8 @@
       <button id="backBtn" class="btn-secondary small" style="margin-top:0;">← กลับ</button>
       <div id="detailHeader"></div>
       <div id="detailStatus" class="status-txt"></div>
-      <div id="detailHistory" class="history-list"></div>
+      <div id="detailHistory"></div>
+      <div id="detailCharts" class="chart-grid"></div>
       <div class="action-row">
         <button id="clearPondBtn" class="btn-secondary small" style="color:var(--coral); border-color:var(--coral);">🗑️ ลบผลเชื้อทั้งหมดของบ่อนี้</button>
       </div>
@@ -52,6 +54,6 @@
   <div class="bottom-space"></div>
 </div>
 
-<script type="module" src="app.js?v=3"></script>
+<script type="module" src="app.js?v=4"></script>
 </body>
 </html>

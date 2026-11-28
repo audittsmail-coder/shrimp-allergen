@@ -6,7 +6,7 @@ import {
   listPondHistory,
   deletePondPathogenEntry,
   clearAllPathogenForPond,
-} from './firebase.js?v=3'; // bump alongside index.html's ?v= on every deploy (cache-busting)
+} from './firebase.js?v=4'; // bump alongside index.html's ?v= on every deploy (cache-busting)
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -15,6 +15,7 @@ const SEV_CLASS = { critical: 'sev-red', watch: 'sev-amber', normal: 'sev-green'
 
 let pondsCache = null;
 let currentPondId = null;
+let chartInstances = [];
 
 function escapeAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -122,6 +123,7 @@ async function showDetail(pondId) {
 
   const statusEl = $('#detailStatus');
   $('#detailHistory').innerHTML = '';
+  destroyCharts();
   if (!isConnected()) {
     statusEl.textContent = 'กรุณาตั้งค่า Firebase ก่อน';
     statusEl.className = 'status-txt err';
@@ -143,6 +145,7 @@ async function showDetail(pondId) {
     statusEl.textContent = visible.length ? `พบ ${visible.length} สัปดาห์ (รอบปัจจุบัน)` : 'ยังไม่มีข้อมูลผลเชื้อในรอบนี้';
     statusEl.className = 'status-txt ok';
     renderHistory(visible, pondId);
+    renderCharts(visible);
   } catch (err) {
     statusEl.textContent = 'โหลดไม่สำเร็จ: ' + err.message;
     statusEl.className = 'status-txt err';
@@ -214,6 +217,64 @@ function renderHistory(visible, pondId) {
   scroller.className = 'table-scroll';
   scroller.appendChild(table);
   wrap.appendChild(scroller);
+}
+
+function destroyCharts() {
+  chartInstances.forEach((c) => c.destroy());
+  chartInstances = [];
+}
+
+const CHART_METRICS = [
+  { key: 'ammonia', label: 'แอมโมเนีย (mg/L)', color: '#e15a4d' },
+  { key: 'nitrite', label: 'ไนไตรท์ (mg/L)', color: '#e8a23b' },
+  { key: 'ph', label: 'pH', color: '#4f92dd' },
+  { key: 'alkalinity', label: 'ด่าง (mg/L)', color: '#2f9e6e' },
+  { key: 'salinity', label: 'ความเค็ม (ppt)', color: '#9b7fd4' },
+];
+
+function renderCharts(visible) {
+  const container = $('#detailCharts');
+  container.innerHTML = '';
+  destroyCharts();
+  if (typeof Chart === 'undefined' || visible.length < 2) return; // need Chart.js + at least 2 points for a trend line
+
+  const labels = visible.map(({ e }) => e.weekDate || ''); // visible is oldest-first already
+
+  CHART_METRICS.forEach((m) => {
+    const data = visible.map(({ e }) => (e[m.key] != null ? e[m.key] : null));
+    if (!data.some((v) => v != null)) return; // nothing recorded for this metric at all
+
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.innerHTML = `<div class="chart-title">${m.label}</div><div class="chart-canvas-wrap"><canvas></canvas></div>`;
+    container.appendChild(card);
+
+    const chart = new Chart(card.querySelector('canvas'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data,
+          borderColor: m.color,
+          backgroundColor: m.color + '22',
+          tension: 0.3,
+          pointRadius: 3,
+          spanGaps: false, // a week with no reading breaks the line rather than being interpolated
+          fill: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { font: { size: 9 }, color: '#9fb3d1', maxRotation: 45 }, grid: { display: false } },
+          y: { ticks: { font: { size: 9 }, color: '#9fb3d1' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+        },
+      },
+    });
+    chartInstances.push(chart);
+  });
 }
 
 $('#clearPondBtn').addEventListener('click', async () => {
