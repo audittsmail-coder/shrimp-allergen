@@ -6,7 +6,7 @@ import {
   listPondHistory,
   deletePondPathogenEntry,
   clearAllPathogenForPond,
-} from './firebase.js?v=4'; // bump alongside index.html's ?v= on every deploy (cache-busting)
+} from './firebase.js?v=5'; // bump alongside index.html's ?v= on every deploy (cache-busting)
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -258,7 +258,8 @@ function renderCharts(visible) {
           borderColor: m.color,
           backgroundColor: m.color + '22',
           tension: 0.3,
-          pointRadius: 3,
+          pointRadius: 2,
+          borderWidth: 1.5,
           spanGaps: false, // a week with no reading breaks the line rather than being interpolated
           fill: true,
         }],
@@ -268,8 +269,8 @@ function renderCharts(visible) {
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { ticks: { font: { size: 9 }, color: '#9fb3d1', maxRotation: 45 }, grid: { display: false } },
-          y: { ticks: { font: { size: 9 }, color: '#9fb3d1' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+          x: { ticks: { font: { size: 7 }, color: '#9fb3d1', maxRotation: 45, maxTicksLimit: 4 }, grid: { display: false } },
+          y: { ticks: { font: { size: 7 }, color: '#9fb3d1', maxTicksLimit: 4 }, grid: { color: 'rgba(255,255,255,0.06)' } },
         },
       },
     });

@@ -99,12 +99,13 @@ body{
 .history-table tr.sev-amber{ background:rgba(232,162,59,0.14); }
 .history-table tr.sev-green{ background:rgba(47,158,110,0.12); }
 
-.chart-grid{ display:flex; flex-direction:column; gap:12px; margin-top:20px; }
+.chart-grid{ display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
 .chart-card{
-  background:var(--surface-soft); border:1px solid var(--line); border-radius:12px; padding:12px 14px;
+  background:var(--surface-soft); border:1px solid var(--line); border-radius:10px; padding:8px 10px;
+  width:calc(50% - 5px); min-width:140px; flex:1 1 140px;
 }
-.chart-title{ font-size:13px; font-weight:700; color:var(--aqua-light); margin-bottom:8px; }
-.chart-canvas-wrap{ position:relative; height:160px; }
+.chart-title{ font-size:11px; font-weight:700; color:var(--aqua-light); margin-bottom:4px; }
+.chart-canvas-wrap{ position:relative; height:90px; }
 
 .row-del{
   background:none; border:none; color:var(--coral); cursor:pointer; font-size:14px;
